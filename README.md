@@ -17,6 +17,7 @@ Using TFI to create a Python class for a model is a single line of code.
 ### Passing in data
 
 TFI can automatically adapt any data you provide to the shape expected by the graph. Let's take a random photo of a dog I found on the internet...
+
 ![dog](https://www.royalcanin.com/~/media/Royal-Canin/Product-Categories/dog-medium-landing-hero.ashx)
 
 ```python
