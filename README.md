@@ -1,8 +1,8 @@
 # TFI
 
-## TFI is a dynamic interface to TensorFlow SavedModels.
+## Use a TensorFlow model in one line of code
 
-TFI is a Python library that dynamically generates a Python class to wrap any TensorFlow SavedModel.
+TFI provides a simple Python interface to any TensorFlow model. It does this by automatically generating a Python class on the fly.
 
 Here's an example of using TFI with a SavedModel based on [Inception v1](https://github.com/tensorflow/models/blob/master/slim/nets/inception_v1.py). This particular SavedModel has a single `predict` method and a [SignatureDef](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/protobuf/meta_graph.proto) that looks something like: `predict(images float <1,224,224,3>) -> (categories string <1001>, scores float <1,1001>)`
 
