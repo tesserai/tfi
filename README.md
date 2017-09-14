@@ -1,6 +1,6 @@
 # TFI
 
-## Use a TensorFlow model in one line of code
+## Use any TensorFlow model in a single line of code
 
 TFI provides a simple Python interface to any TensorFlow model. It does this by automatically generating a Python class on the fly.
 
