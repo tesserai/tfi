@@ -1,0 +1,2 @@
+include *.md *.txt LICENSE shell.nix
+recursive-include tests *.py
