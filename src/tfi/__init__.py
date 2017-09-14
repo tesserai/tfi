@@ -3,7 +3,7 @@ import tfi.data
 
 from tfi.as_tensor import as_tensor
 
-__version__ = "0.2"
+__version__ = "0.4"
 
 __title__ = "tfi"
 __description__ = "Use any TensorFlow model in a single line of code"

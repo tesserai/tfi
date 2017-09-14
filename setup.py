@@ -26,7 +26,7 @@ CLASSIFIERS = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 INSTALL_REQUIRES = [
-    "tensorflow",
+    "tensorflow>=1.3",
 ]
 
 ###################################################################

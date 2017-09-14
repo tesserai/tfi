@@ -10,12 +10,12 @@ TFI provides a simple Python interface to any TensorFlow model. It does this by 
 
 Here's an example of using TFI with a SavedModel based on `Inception v1 <https://github.com/tensorflow/models/blob/master/slim/nets/inception_v1.py>`_. This particular SavedModel has a single ``predict`` method and a `SignatureDef <https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/protobuf/meta_graph.proto>`_ that looks something like: ``predict(images float <1,224,224,3>) -> (categories string <1001>, scores float <1,1001>)``
 
-.. -code-begin-
+TFI in Action
+=============
 
 .. code-block:: pycon
 
    >>> import tfi
-   >>>
    >>> InceptionV1 = tfi.saved_model.as_class("./inception-v1.saved_model")
 
 Passing in data
@@ -26,8 +26,6 @@ TFI can automatically adapt any data you provide to the shape expected by the gr
 .. image:: https://www.royalcanin.com/~/media/Royal-Canin/Product-Categories/dog-medium-landing-hero.ashx
    :alt: dog
 
-.. -code-begin-
-
 .. code-block:: pycon
 
    >>> model = InceptionV1()
@@ -36,8 +34,6 @@ TFI can automatically adapt any data you provide to the shape expected by the gr
    >>> categories, scores = result.categories, result.scores[0]
 
 If we print the top 5 probabilities, we see:
-
-.. -code-begin-
 
 .. code-block:: pycon
 
@@ -70,14 +66,18 @@ TFI uses the information in a SavedModel's SignatureDefs to generate methods on 
 
 The SavedModel used in the example was created using the `tf.estimator.Estimator#export_savedmodel <https://www.tensorflow.org/api_docs/python/tf/estimator/Estimator#export_savedmodel>`_ function.
 
+Getting Started
+===============
+`TFI is on PyPI <https://pypi.python.org/pypi/tfi>`_, install it with ``pip install tfi``.
+
 Future work
 ===========
 
 Adapting ``tfi.data`` functions to handle queues and datasets wouldn't require much effort. If this is something you'd like me to do, please `file an issue <https://github.com/ajbouh/tfi/issues/new>`_ with your specific use case!
 
-Extending `tfi.data` to support more formats is also quite straightforward. `File an issue <https://github.com/ajbouh/tfi/issues/new>`_ with a specific format you'd like to see. For bonus points, include the expected tensor dtype and shape. For double bonus points, include a way for me to test it in a real model. :)
+Extending `tfi.data` to support more formats is also quite straightforward. `File an issue <https://github.com/ajbouh/tfi/issues/new>`_ with a specific format you'd like to see. For bonus points, include the expected tensor dtype and shape. For double bonus points, include a way for me to test it in a real model.
 
-It's not very easy to create well-formed SavedModels today. If this is something you'd like TFI to do in the future, `File an issue <https://github.com/ajbouh/tfi/issues/new>`_ with your use case!
+It's not very easy to create well-formed SavedModels today. If this is something you'd like TFI to do in the future... `file an issue <https://github.com/ajbouh/tfi/issues/new>`_. ;)
 
 Acknowledgements
 ================
