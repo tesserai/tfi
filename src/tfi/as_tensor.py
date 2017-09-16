@@ -22,3 +22,4 @@ def as_tensor(object, shape, dtype):
         return tf.stack(r)
     if hasattr(object, '__tensor__'):
         return object.__tensor__(shape, dtype)
+    return object

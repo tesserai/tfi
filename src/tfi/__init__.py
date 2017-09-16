@@ -1,7 +1,7 @@
-import tfi.saved_model
+import tfi.as_tensor
+import tfi.checkpoint
 import tfi.data
-
-from tfi.as_tensor import as_tensor
+import tfi.saved_model
 
 __version__ = "0.4"
 
