@@ -19,6 +19,11 @@ from tensorflow.python.debug.wrappers import local_cli_wrapper
 from tensorflow.python.framework import ops as ops_lib
 
 from tfi.as_tensor import as_tensor
+from tfi.doc.docstring import GoogleDocstring
+from tfi.doc.arxiv import discover_arxiv_ids, ArxivBibtexRepo
+from tfi.doc.arxiv2bib import arxiv2bib
+from tfi.doc.git import git_authorship
+from tfi.doc import template
 
 class _GetAttrAccumulator:
     def __init__(self, gotten=None):
@@ -51,6 +56,13 @@ def _signature_def_for_instance_method(instance, fn):
             (name, tf.saved_model.utils.build_tensor_info(tensor))
             for name, tensor in tensor_dict.items()
         ])
+
+    def _enrich_docs(doc_fields, tensor_dict):
+        existing = {k: v for k, _, v in doc_fields}
+        return [
+            (name, _tensor_info_str(tensor), existing.get(name, ''))
+            for name, tensor in tensor_dict.items()
+        ]
 
     sig = inspect.signature(fn)
     input_tensors = OrderedDict([
