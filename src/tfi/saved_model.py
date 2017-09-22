@@ -41,6 +41,51 @@ class _GetAttrAccumulator:
         return result
 
 def _signature_def_for_instance_method(instance, fn):
+    # print("_build_signature_def", fn, fn.__doc__)
+    # doc_sections, doc_dict = GoogleDocstring(obj=fn).result()
+    # ........
+    # doc_dict['args'] = _enrich_docs(doc_dict['args'], input_tensors)
+    # doc_dict['returns'] = _enrich_docs(doc_dict['returns'], output_tensors)
+
+    # arxiv_repo = ArxivBibtexRepo("arxiv.json", arxiv2bib)
+    # model_doc_sections, _ = GoogleDocstring(obj=model).result()
+    #
+    # if hasattr(model, '__file__'):
+    #     git = git_authorship(model.__file__)
+    # else:
+    #     git = {'authors': []}
+    #
+    # template_args = {
+    #     "title": model.__name__,
+    #     "subhead": model_doc_sections[0][1][0],
+    #     "authors": [
+    #        *[
+    #             {
+    #                 "name": author['name'],
+    #                 "url": "mailto:%s" % author['email'],
+    #                 "affiliation_name": "Code Contributor",
+    #                 "affiliation_url": author['commits_url'],
+    #             }
+    #             for author in git['authors']
+    #         ],
+    #     ],
+    #     "sections": model_doc_sections,
+    #     "methods": [
+    #         {
+    #             "signature": method_name,
+    #             "sections": method_doc_sections,
+    #             "args": method_doc_fields['args'],
+    #             "returns": method_doc_fields['returns'],
+    #         }
+    #         for method_name, method_doc_sections, method_doc_fields, _ in signature_def_entries
+    #     ],
+    #     "bibliographies": [
+    #         *arxiv_repo.resolve(discover_arxiv_ids(model))
+    #     ],
+    # }
+    # template.write(
+    #         "%s/index.html" % export_path, **template_args)
+    # return doc_sections, doc_dict,
     def _expand_annotation(instance, annotation, default=None):
         if annotation == inspect.Signature.empty:
             return default
