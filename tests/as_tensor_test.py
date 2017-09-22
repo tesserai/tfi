@@ -1,25 +1,29 @@
 import unittest
 
-from as_tensor import as_tensor
+from tfi.as_tensor import as_tensor
+
+from functools import partialmethod
 
 class AsTensorTest(unittest.TestCase):
     pass
 
 _FIXTURES = [
-    ('string', 'string', [], 'string'),
-    ('list', ['string'], [None], ['string']),
-    ('list', ['string'], [1], ['string']),
-    ('generator', (s for s in ['string']), [1], ['string']),
-    ('emptylist', [], [None], []),
-    ('emptylist', [], [0], []),
-    ('nested_list', [['string'], ['foo']], [2,1], [['string'], ['foo']]),
+    ('string', 'string', [], str, 'string'),
+    ('list', ['string'], [None], str, ['string']),
+    ('list', ['string'], [1], str, ['string']),
+    ('generator', (s for s in ['string']), [1], str, ['string']),
+    ('emptylist', [], [None], float, []),
+    ('emptylist', [], [0], float, []),
+    ('nested_list', [['string'], ['foo']], [2,1], str, [['string'], ['foo']]),
 ]
-for (name, expect, shape, data) in _FIXTURES:
-    def do_test(self):
-        result = as_tensor(data, shape)
+for (name, *rest) in _FIXTURES:
+    def do_test(self, expect, shape, dtype, data):
+        result = as_tensor(data, shape, dtype)
         self.assertEqual(expect, result)
 
-    setattr(AsTensorTest, 'test_%s' % name, do_test)
+    setattr(AsTensorTest,
+            'test_%s' % name,
+            partialmethod(do_test, *rest))
 
 if __name__ == '__main__':
     unittest.main()
