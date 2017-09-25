@@ -93,15 +93,18 @@ Now let's see how this works for a larger model that's also been pre-trained, li
 
 The code below is spiritually equivalent to the ``Math`` example above: define a class that inherits from ``tfi.saved_model.Base``, build the graph and load a checkpoint in ``__init__``, add any instance methods you want, and export.
 
+Here's a `gist of the code below <https://gist.github.com/ajbouh/2b1d076f4af569edeeab819a39184abf>`_, if that's easier to read.
+
 First, let's get the Python code for Inception v1 and put it on ``PYTHONPATH``.
 
 .. code-block:: bash
 
    $ git clone https://github.com/tensorflow/models
-   $ export PYTHONPATH=$PWD/models/slim
+   $ export PYTHONPATH=$PWD/models/research/slim
 
 
 .. code-block:: python
+
    from datasets import dataset_factory
    from nets import nets_factory
    import os.path

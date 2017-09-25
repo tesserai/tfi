@@ -3,7 +3,7 @@ import tfi.checkpoint
 import tfi.data
 import tfi.saved_model
 
-__version__ = "0.4"
+__version__ = "0.5"
 
 __title__ = "tfi"
 __description__ = "Use any TensorFlow model in a single line of code"
