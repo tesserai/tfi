@@ -12,12 +12,10 @@ import types
 import warnings
 
 import tensorflow as tf
-from tensorflow.contrib.saved_model.python.saved_model import reader
 from tensorflow.core.framework import types_pb2
 from tensorflow.python.client import session
 from tensorflow.python.debug.wrappers import local_cli_wrapper
 from tensorflow.python.framework import ops as ops_lib
-from tensorflow.python.saved_model import loader
 
 from tfi.as_tensor import as_tensor
 
@@ -175,17 +173,20 @@ class Meta(type):
 class Base(object, metaclass=Meta):
     pass
 
-def _get_meta_graph_def(saved_model_dir, tag_set):
-  saved_model = reader.read_saved_model(saved_model_dir)
-  set_of_tags = set(tag_set.split(','))
-  for meta_graph_def in saved_model.meta_graphs:
-    if set(meta_graph_def.meta_info_def.tags) == set_of_tags:
-      return meta_graph_def
-
-  raise RuntimeError('MetaGraphDef associated with tag-set ' + tag_set +
-                     ' could not be found in SavedModel')
-
 def as_class(saved_model_dir, tag_set=tf.saved_model.tag_constants.SERVING):
+    from tensorflow.contrib.saved_model.python.saved_model import reader
+    from tensorflow.python.saved_model import loader
+
+    def _get_meta_graph_def(saved_model_dir, tag_set):
+      saved_model = reader.read_saved_model(saved_model_dir)
+      set_of_tags = set(tag_set.split(','))
+      for meta_graph_def in saved_model.meta_graphs:
+        if set(meta_graph_def.meta_info_def.tags) == set_of_tags:
+          return meta_graph_def
+
+      raise RuntimeError('MetaGraphDef associated with tag-set ' + tag_set +
+                         ' could not be found in SavedModel')
+
     # TODO(adamb) Choose a better name than CUSTOMTYPE.
     return type('CUSTOMTYPE', (Base,), {
         '__init__': lambda s:
