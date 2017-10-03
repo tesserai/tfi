@@ -195,11 +195,10 @@ def as_class(saved_model_dir, tag_set=tf.saved_model.tag_constants.SERVING):
                 _get_meta_graph_def(saved_model_dir, tag_set).signature_def,
     })
 
-def export(export_path, model_fn):
+def export(export_path, model):
     # TODO(adamb) Allow customization of tags.
     tags = [tf.saved_model.tag_constants.SERVING]
 
-    model = model_fn()
     if not isinstance(model, Base):
         raise Exception("%s is not an instance of Base" % model)
 

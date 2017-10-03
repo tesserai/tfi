@@ -21,7 +21,7 @@ class SavedModelTest(unittest.TestCase):
         self.assertEqual(3.0, m.add(x=1.0, y=2.0).sum)
         self.assertEqual(2.0, m.mult(x=1.0, y=2.0).prod)
 
-        tfi.saved_model.export("math.saved_model", Math)
+        tfi.saved_model.export("math.saved_model", m)
         # Prove that we can save it.
         # Prove that we can restore it to a new class.
 
