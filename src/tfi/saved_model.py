@@ -5,6 +5,7 @@ from __future__ import print_function
 import argparse
 from collections import OrderedDict, namedtuple
 import inspect
+import functools
 import os
 import re
 import sys
@@ -87,7 +88,7 @@ def _make_method(signature_def, result_class_name):
             tf.TensorShape(signature_def_input.tensor_shape).as_list(),
             tf.as_dtype(signature_def_input.dtype))
 
-    def _run(self, **kwargs):
+    def _impl(self, **kwargs):
         feed_dict = {}
         session = self.__tfi_session__
         with session.graph.as_default():
@@ -111,7 +112,19 @@ def _make_method(signature_def, result_class_name):
                 feed_dict=feed_dict)
 
         return result_class._make(result)
-    return _run
+
+    # Need to properly forge method parameters, complete with annotations.
+    argdef = ",".join(["_", *input_tensor_names_sorted])
+    argcall = ",".join(["_", *["%s=%s" % (k, k) for k in input_tensor_names_sorted]])
+    gensrc = """lambda %s: _impl(%s)""" % (argdef, argcall)
+    impl = eval(gensrc, {'_impl': _impl})
+    sigdef_inputs = signature_def.inputs
+    impl.__annotations__ = {
+        k: sigdef_inputs[k]
+        for k, p in inspect.signature(impl).parameters.items()
+        if k in sigdef_inputs
+    }
+    return impl
 
 class Meta(type):
     @staticmethod
@@ -124,6 +137,7 @@ class Meta(type):
         if '__init__' in d:
             init = d['__init__']
             # Wrap __init__ to graph, session, and methods.
+            @functools.wraps(init)
             def wrapped_init(self, *a, **k):
                 self.__tfi_graph__ = tf.Graph()
                 self.__tfi_session__ = tf.Session(graph=self.__tfi_graph__)
@@ -146,7 +160,6 @@ class Meta(type):
                             types.MethodType(
                                     _make_method(sigdef, result_class_name),
                                     self))
-
             d['__init__'] = wrapped_init
 
         return super(Meta, meta).__new__(meta, classname, bases, d)
