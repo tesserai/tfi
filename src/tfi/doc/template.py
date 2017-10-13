@@ -41,25 +41,28 @@ _style_fragment = """
 }
 """
 
-def _render_sections(sections):
-    def render_section(type, contents):
-        if type == "text":
-            s = """<p>%s</p>""" % "\n".join(contents)
-            return s.replace("\n\n", "</p><p>")
+def _render_section(type, contents):
+    if type == "text":
+        s = """<p>%s</p>""" % "\n".join(contents)
+        return s.replace("\n\n", "</p><p>")
 
-        if type == "example":
-            return "\n".join(contents)
+    if type == "example":
+        return "\n".join(contents)
 
-    return "\n".join([
-        render_section(type, contents)
-        for type, contents in sections
-    ])
 
 _page_template = """
-<!doctype html>
-<meta charset="utf-8">
-<script src="https://distill.pub/template.v1.js"></script>
+<html>
+  <head>
+    <meta content="IE=edge" http-equiv="X-UA-Compatible">
+    <meta charset="utf-8">
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no" name="viewport">
 
+    <style>
+    $style_fragment
+    </style>
+  </head>
+
+<!--
 <script type="text/front-matter">
   title: $title
   description: $subhead
@@ -68,25 +71,21 @@ $authors_fragment
   affiliations:
 $affiliations_fragment
 </script>
+-->
 
+  <body id="documentation" class="">
+    <div id="content">
+    <h1>$title</h1>
+    <h2>$subhead</h2>
 
-<style>
-$style_fragment
-</style>
+    <dt-byline></dt-byline>
 
-<dt-article>
-<h1>$title</h1>
-<h2>$subhead</h2>
+    $sections_fragment
+    $methods_fragment
+    </div>
 
-<dt-byline></dt-byline>
-
-$sections_fragment
-
-<h2>Methods</h2>
-$methods_fragment
-
-</div>
-</dt-article>
+  </body>
+</html>
 
 <dt-appendix>
 </dt-appendix>
@@ -106,7 +105,7 @@ def render(
         subhead,
         sections,
         methods,
-        bibliographies):
+        references):
     t = Template(_page_template)
     return t.substitute(
             authors_fragment="\n".join([
@@ -120,48 +119,64 @@ def render(
             style_fragment=_style_fragment,
             title=title,
             subhead=subhead,
-            sections_fragment=_render_sections(sections),
+            sections_fragment="\n".join([
+                    _render_section(type, contents)
+                for type, contents in sections]),
             methods_fragment="\n".join([
-                Template("""<div class="method-area">
-                  <div class="method-copy" style="font-size: 1rem">
-                    <dt-code class="language-tensorlang">$signature</dt-code>
-
-                    $sections_fragment
-
-                    <div class="method-list inputs">
-                      <h4 class="method-list-title">ARGS</h4>
-                      <div class="method-list-group">
-                        $args_fragment
+                Template("""<section class="method">
+                  <div class="method-area">
+                    <div class="method-copy">
+                      <div class="method-copy-padding">
+                        <h1>$method_name method</h1>
+                        $sections_fragment
+                      </div>
+                      <div class="method-list inputs">
+                        <h4 class="method-list-title">INPUTS</h4>
+                        <div class="method-list-group">
+                          $args_fragment
+                        </div>
+                      </div>
+                      <div class="method-list outputs">
+                        <h4 class="method-list-title">OUTPUTS</h4>
+                        <div class="method-list-group">
+                          $returns_fragment
+                        </div>
+                      </div>
                       </div>
                     </div>
-
-                    <div class="method-list outputs">
-                      <h4 class="method-list-title">RETURNS</h4>
-                      <div class="method-list-group">
-                        $returns_fragment
-                      </div>
-                    </div>
-                  </div>""").substitute(
+                  </div>
+                </section>""").substitute(
+                        method_name=method['name'],
                         args_fragment="\n".join([
                                 Template("""
                                         <div class="method-list-item">
-                                          <h5 class="method-list-item-label">$name</h5>
+                                          <h5 class="method-list-item-label">
+                                            $name
+                                            <span class="method-list-item-label-details">$details</span>
+                                          </h5>
                                           <p class="method-list-item-description">$description</p>
                                         </div>""").substitute(
                                         name=name,
+                                        details=kind,
                                         description="\n".join(description))
                                 for name, kind, description in method['args']]),
                         returns_fragment="\n".join([
                                 Template("""
                                         <div class="method-list-item">
-                                          <h5 class="method-list-item-label">$name</h5>
+                                          <h5 class="method-list-item-label">
+                                            $name
+                                            <span class="method-list-item-label-details">$details</span>
+                                          </h5>
                                           <p class="method-list-item-description">$description</p>
                                         </div>""").substitute(
                                         name=name,
+                                        details=kind,
                                         description="\n".join(description))
                                 for name, kind, description in method['returns']]),
-                        sections_fragment=_render_sections(method['sections']),
+                        sections_fragment="\n".join([
+                                _render_section(type, contents)
+                                for type, contents in method['sections']]),
                         **method)
                 for method in methods
             ]),
-            bibliography_fragment="\n".join(bibliographies))
+            bibliography_fragment="\n".join(references))

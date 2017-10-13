@@ -78,6 +78,7 @@ class _HelpAction(argparse.Action):
 
 parser = argparse.ArgumentParser(prog='tfi', add_help=False)
 parser.add_argument('--export', type=str, help='path to export to')
+parser.add_argument('--export-doc', type=str, help='path to export doc to')
 parser.add_argument('--interactive', '-i', default=False, action='store_true', help='Start interactive session')
 parser.add_argument('specifier', type=str, default=None, nargs='?', action=ModelSpecifier, help='fully qualified class name to instantiate')
 parser.add_argument('method', type=str, nargs='?', help='name of method to run')
@@ -114,7 +115,7 @@ def apply_fn_args(fn_name, needed_params, param_types, fn, raw_args):
 
 def run(argns, remaining_args):
     model = None
-    exporting = argns.export is not None
+    exporting = argns.export is not None or argns.export_doc is not None
     if argns.specifier:
         hparam_raw_args, method_raw_args = split_list(remaining_args, '--')
 
@@ -146,6 +147,9 @@ def run(argns, remaining_args):
                 locals=None,
                 history_filename=os.path.expanduser('~/.tfihistory'),
                 model=model)
+
+    if argns.export_doc:
+        tfi.doc.save(argns.export_doc, model)
 
     if argns.export:
         tfi.saved_model.export(argns.export, model)

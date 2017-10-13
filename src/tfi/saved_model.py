@@ -20,10 +20,6 @@ from tensorflow.python.framework import ops as ops_lib
 
 from tfi.as_tensor import as_tensor
 from tfi.doc.docstring import GoogleDocstring
-from tfi.doc.arxiv import discover_arxiv_ids, ArxivBibtexRepo
-from tfi.doc.arxiv2bib import arxiv2bib
-from tfi.doc.git import git_authorship
-from tfi.doc import template
 
 class _GetAttrAccumulator:
     def __init__(self, gotten=None):
@@ -40,67 +36,20 @@ class _GetAttrAccumulator:
             result = getattr(result, name)
         return result
 
-def _signature_def_for_instance_method(instance, fn):
-    # print("_build_signature_def", fn, fn.__doc__)
-    # doc_sections, doc_dict = GoogleDocstring(obj=fn).result()
-    # ........
-    # doc_dict['args'] = _enrich_docs(doc_dict['args'], input_tensors)
-    # doc_dict['returns'] = _enrich_docs(doc_dict['returns'], output_tensors)
-
-    # arxiv_repo = ArxivBibtexRepo("arxiv.json", arxiv2bib)
-    # model_doc_sections, _ = GoogleDocstring(obj=model).result()
-    #
-    # if hasattr(model, '__file__'):
-    #     git = git_authorship(model.__file__)
-    # else:
-    #     git = {'authors': []}
-    #
-    # template_args = {
-    #     "title": model.__name__,
-    #     "subhead": model_doc_sections[0][1][0],
-    #     "authors": [
-    #        *[
-    #             {
-    #                 "name": author['name'],
-    #                 "url": "mailto:%s" % author['email'],
-    #                 "affiliation_name": "Code Contributor",
-    #                 "affiliation_url": author['commits_url'],
-    #             }
-    #             for author in git['authors']
-    #         ],
-    #     ],
-    #     "sections": model_doc_sections,
-    #     "methods": [
-    #         {
-    #             "signature": method_name,
-    #             "sections": method_doc_sections,
-    #             "args": method_doc_fields['args'],
-    #             "returns": method_doc_fields['returns'],
-    #         }
-    #         for method_name, method_doc_sections, method_doc_fields, _ in signature_def_entries
-    #     ],
-    #     "bibliographies": [
-    #         *arxiv_repo.resolve(discover_arxiv_ids(model))
-    #     ],
-    # }
-    # template.write(
-    #         "%s/index.html" % export_path, **template_args)
-    # return doc_sections, doc_dict,
+def _resolve_instance_method_tensors(instance, fn):
     def _expand_annotation(instance, annotation, default=None):
         if annotation == inspect.Signature.empty:
             return default
         return annotation(instance) if callable(annotation) else annotation
 
-    def _get_tfi_method_name(fn):
-        if hasattr(fn, '__tfi_method_name__'):
-            return fn.__tfi_method_name__
-        return None
+    def _tensor_info_str(tensor):
+        if tensor.shape.ndims is None:
+            return tensor.dtype.name
 
-    def _tensor_infos_dict(tensor_dict):
-        return OrderedDict([
-            (name, tf.saved_model.utils.build_tensor_info(tensor))
-            for name, tensor in tensor_dict.items()
-        ])
+        return "%s <%s>" % (
+            tensor.dtype.name,
+            ", ".join(["?" if n is None else str(n) for n in tensor.shape.as_list()]),
+        )
 
     def _enrich_docs(doc_fields, tensor_dict):
         existing = {k: v for k, _, v in doc_fields}
@@ -118,10 +67,16 @@ def _signature_def_for_instance_method(instance, fn):
         (name, _expand_annotation(instance, value))
         for name, value in _expand_annotation(instance, sig.return_annotation, {}).items()
     ])
-    return tf.saved_model.signature_def_utils.build_signature_def(
-        inputs=_tensor_infos_dict(input_tensors),
-        outputs=_tensor_infos_dict(output_tensors),
-        method_name=_get_tfi_method_name(fn))
+
+    if fn.__doc__:
+        doc_sections, doc = GoogleDocstring(obj=fn).result()
+        doc['sections'] = doc_sections
+    else:
+        doc = {'sections': [], 'args': {}, 'returns': {}}
+    doc['args'] = _enrich_docs(doc['args'], input_tensors)
+    doc['returns'] = _enrich_docs(doc['returns'], output_tensors)
+
+    return doc, input_tensors, output_tensors
 
 def _make_method(signature_def, result_class_name):
     # Sort to preserve order because we need to go from value to key later.
@@ -205,10 +160,25 @@ class Meta(type):
                 # Once init has executed, we can bind proper methods too!
                 if not hasattr(self, '__tfi_signature_defs__'):
                     self.__tfi_signature_defs__ = OrderedDict()
+                    self.__tfi_signature_def_docs__ = OrderedDict()
+
+                    def _tensor_infos_dict(tensor_dict):
+                        return OrderedDict([
+                            (name, tf.saved_model.utils.build_tensor_info(tensor))
+                            for name, tensor in tensor_dict.items()
+                        ])
+
                     for method_name, method in inspect.getmembers(self, predicate=inspect.ismethod):
                         if method_name.startswith('_'):
                             continue
-                        self.__tfi_signature_defs__[method_name] = _signature_def_for_instance_method(self, method)
+
+                        doc, input_tensors, output_tensors = _resolve_instance_method_tensors(self, method)
+
+                        self.__tfi_signature_def_docs__[method_name] = doc
+                        self.__tfi_signature_defs__[method_name] = tf.saved_model.signature_def_utils.build_signature_def(
+                            inputs=_tensor_infos_dict(input_tensors),
+                            outputs=_tensor_infos_dict(output_tensors),
+                            method_name=method.__tfi_method_name__ if hasattr(method, '__tfi_method_name__') else None)
 
                 for method_name, sigdef in self.__tfi_signature_defs__.items():
                     result_class_name = '%s__%s__Result' % (classname, method_name)
