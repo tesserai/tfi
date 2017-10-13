@@ -2,28 +2,91 @@ import tensorflow as tf
 import collections
 import numpy as np
 
+class ShapeMismatchException(Exception):
+    def __init__(self, dtype, longest_matching_suffix):
+        self.dtype = dtype
+        self.longest_matching_suffix = longest_matching_suffix
+
+def _detect_native_kind(object):
+    if isinstance(object, str):
+        return [], tf.string, lambda o, shp: np.reshape(o, shp)
+    if isinstance(object, int):
+        return [], tf.int32, lambda o, shp: np.reshape(o, shp)
+    if isinstance(object, float):
+        return [], tf.float32, lambda o, shp: np.reshape(o, shp)
+    return None, None, None
+
+def _iterable_as_tensor(object, shape, dtype):
+    # TODO(adamb) For now assume that elements in iterable can be stacked.
+    #     Should actually check that they all have the same shape and dtype.
+    #     If they don't, we should be returning a list of them, not a tensor.
+
+    # If object is iterable, assume we'll make a list of tensors with
+    # adjusted target shapes.
+    if shape is None:
+        expect_len = None
+    elif len(shape) >= 1:
+        # Perhaps we know enough about the target shape to know expected length.
+        expect_len = shape[0]
+    else:
+        raise Exception("Shape is %s. Didn't expect iterable: %s" % (shape, object))
+    r = []
+    cur_len = 0
+    # Adjust target shape for recursive call.
+    sub_shape = shape[1:] if shape is not None else None
+    for o in object:
+        r.append(as_tensor(o, sub_shape, dtype))
+        cur_len += 1
+        if expect_len is not None and cur_len > expect_len:
+            break
+    if expect_len is not None and cur_len != expect_len:
+        raise Exception("Expected exactly %s elements (got at least %s) from: %s" % (expect_len, cur_len, object))
+    return tf.stack(r)
+
 def as_tensor(object, shape, dtype):
-    if isinstance(object, (str, np.ndarray)):
-        return object
-    if isinstance(object, collections.Iterable):
-        if shape is None:
-            max_len = None
-        elif len(shape) >= 1:
-            max_len = shape[0]
-        else:
-            raise Exception("Shape is %s. Didn't expect iterable: %s" % (shape, object))
-        sub_shape = shape[1:] if shape is not None else None
-        r = []
-        cur_len = 0
-        for o in object:
-            r.append(as_tensor(o, sub_shape, dtype))
-            cur_len += 1
-            if max_len is not None and cur_len > max_len:
-                raise Exception("Iterable too long. Expected exactly %s elements from: %s" % (max_len, object))
-        return tf.stack(r)
-    if hasattr(object, '__tensor__'):
-        return object.__tensor__(shape, dtype)
-    return object
+    # TODO(adamb) Figure out how to handle coercing primitive types to TF dtypes.
+    candidate_dims, candidate_dtype, reshape_fn = _detect_native_kind(object)
+
+    if reshape_fn is not None:
+        candidate = object
+    elif isinstance(object, np.ndarray):
+        candidate = tf.constant(object)
+        candidate_dims = object.shape
+        candidate_dtype = tf.as_dtype(object.dtype)
+        reshape_fn = lambda o, shp: np.reshape(o, shp)
+    elif isinstance(object, collections.Iterable):
+        candidate = _iterable_as_tensor(object, shape, dtype)
+        candidate_dims = candidate.shape.dims
+        candidate_dtype = candidate.dtype
+        reshape_fn = lambda o, shp: tf.reshape(o, shp)
+    elif hasattr(object, '__tensor__'):
+        # Assume that we need to use __tensor__ method if object doesn't have
+        # a native dtype.
+        try:
+            candidate = object.__tensor__(shape, dtype)
+            candidate_dims = candidate.shape.dims
+            candidate_dtype = candidate.dtype
+            reshape_fn = lambda o, shp: tf.reshape(o, shp)
+        except ShapeMismatchException as sme:
+            candidate = object
+            candidate_dims = sme.longest_matching_suffix
+            candidate_dtype = sme.dtype
+            reshape_fn = lambda o, shp: tf.reshape(o.__tensor__(candidate_dims, dtype), shp)
+    else:
+        raise Exception("Could not coerce %s to tensor %s with shape %s" % (object, dtype, shape))
+
+    if tf.TensorShape(candidate_dims).is_compatible_with(tf.TensorShape(shape)):
+        return candidate
+
+    candidate_ndims = len(candidate_dims)
+    if candidate_ndims > shape.ndims or shape.dims[-candidate_ndims:] != candidate_dims:
+        # Returned shape must be an exact suffix of target shape.
+        raise Exception("Could not coerce %s to tensor %s with shape %s. Candidate dimensions are not a compatible suffix: %s" % (object, dtype, shape, candidate_dims))
+    for dim in shape.dims[:-candidate_ndims]:
+        # Check that all remaining dimensions are either None or 1.
+        if dim is not None and dim != 1:
+            raise Exception("Could not coerce %s to tensor %s with shape %s. There are dimensions in target shape that prevent simple reshaping of compromise shape: %s" % (object, dtype, shape, compromise))
+    return reshape_fn(candidate, shape)
 
 from functools import reduce
 

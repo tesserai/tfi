@@ -30,8 +30,17 @@ class _ImageBytes(Decoder):
         w = None
         if shape is not None:
             shape_len = len(shape)
-            if shape_len < 3 or shape_len > 4:
-                raise Exception("Unsupported shape: %s" % shape)
+            # NOTE(adamb) Technically we can load images, convert them to
+            #     single channel (if they aren't already) and reshape them to
+            #     [h, w]. Revisit the code below if we ever want this.
+            if shape_len < 3:
+                return None
+            # NOTE(adamb) Technically we can handle .gif files, which decode to
+            #     a shape of length 4. For this to work properly, we'll need to
+            #     know which one we're dealing with and return None if the
+            #     format doesn't match the requested shape.
+            if shape_len > 3:
+                return TensorShape(shape[-3:])
             channels = shape[-1]
             h = shape[-3]
             w = shape[-2]
