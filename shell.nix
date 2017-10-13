@@ -9,4 +9,9 @@ stdenv.mkDerivation rec {
     python3Packages.virtualenv
     python3Packages.wheel
   ];
+
+  shellHook =
+    ''
+      export SOURCE_DATE_EPOCH="315532800"
+    '';
 }
