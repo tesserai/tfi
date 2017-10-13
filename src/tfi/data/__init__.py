@@ -1,6 +1,7 @@
 import mimetypes
 
-from tfi.as_tensor import as_tensor, from_tensor
+from tfi.as_tensor import as_tensor as _as_tensor
+from tfi.as_tensor import from_tensor as _from_tensor
 
 import tensorflow as tf
 
@@ -45,7 +46,7 @@ class _ImageBytes(Decoder):
             h = shape[-3]
             w = shape[-2]
 
-        contents = as_tensor(self.bytes, None, None)
+        contents = _as_tensor(self.bytes, None, None)
         image = tf.image.decode_image(contents, channels=channels)
         if dtype is not None and dtype != image.dtype:
             image = tf.image.convert_image_dtype(image, dtype=dtype)
@@ -69,7 +70,7 @@ def _compose(f, g):
     return lambda x: f(g(x))
 
 def _encode(tensor, accept_mimetypes):
-    return from_tensor(
+    return _from_tensor(
             tensor,
             [
                 (dtype, shape, _compose(accept_mimetypes[mimetype], encoder))
@@ -115,7 +116,7 @@ import sys
 from tfi.data.terminal import imgcat
 
 def terminal_write(o):
-    tensor = as_tensor(o, None, None)
+    tensor = _as_tensor(o, None, None)
     accept_mimetypes = {"image/png": imgcat, "text/plain": lambda x: x}
     encoded = _encode(tensor, accept_mimetypes)
     if encoded is None:

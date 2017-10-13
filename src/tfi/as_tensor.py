@@ -44,6 +44,12 @@ def _iterable_as_tensor(object, shape, dtype):
     return tf.stack(r)
 
 def as_tensor(object, shape, dtype):
+    tensor = maybe_as_tensor(object, shape, dtype)
+    if tensor is None:
+        raise Exception("Could not coerce %s to tensor %s with shape %s" % (object, dtype, shape))
+    return tensor
+
+def maybe_as_tensor(object, shape, dtype):
     # TODO(adamb) Figure out how to handle coercing primitive types to TF dtypes.
     candidate_dims, candidate_dtype, reshape_fn = _detect_native_kind(object)
 
@@ -73,7 +79,7 @@ def as_tensor(object, shape, dtype):
             candidate_dtype = sme.dtype
             reshape_fn = lambda o, shp: tf.reshape(o.__tensor__(candidate_dims, dtype), shp)
     else:
-        raise Exception("Could not coerce %s to tensor %s with shape %s" % (object, dtype, shape))
+        return None
 
     if tf.TensorShape(candidate_dims).is_compatible_with(tf.TensorShape(shape)):
         return candidate
