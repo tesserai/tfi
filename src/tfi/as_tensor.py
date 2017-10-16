@@ -77,7 +77,10 @@ def maybe_as_tensor(object, shape, dtype):
             candidate = object
             candidate_dims = sme.longest_matching_suffix
             candidate_dtype = sme.dtype
-            reshape_fn = lambda o, shp: tf.reshape(o.__tensor__(candidate_dims, dtype), shp)
+            reshape_fn = lambda o, shp: tf.reshape(
+                    o.__tensor__(candidate_dims, dtype),
+                    [-1 if d is None else d for d in shp])
+
     else:
         return None
 
@@ -85,10 +88,10 @@ def maybe_as_tensor(object, shape, dtype):
         return candidate
 
     candidate_ndims = len(candidate_dims)
-    if candidate_ndims > shape.ndims or shape.dims[-candidate_ndims:] != candidate_dims:
+    if candidate_ndims > len(shape) or shape[-candidate_ndims:] != candidate_dims:
         # Returned shape must be an exact suffix of target shape.
         raise Exception("Could not coerce %s to tensor %s with shape %s. Candidate dimensions are not a compatible suffix: %s" % (object, dtype, shape, candidate_dims))
-    for dim in shape.dims[:-candidate_ndims]:
+    for dim in shape[:-candidate_ndims]:
         # Check that all remaining dimensions are either None or 1.
         if dim is not None and dim != 1:
             raise Exception("Could not coerce %s to tensor %s with shape %s. There are dimensions in target shape that prevent simple reshaping of compromise shape: %s" % (object, dtype, shape, compromise))

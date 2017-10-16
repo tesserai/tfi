@@ -16,6 +16,24 @@ import tfi
 from collections import OrderedDict
 from functools import partial
 
+def resolve_method_and_needed(obj, method_spec):
+    kwargs = {}
+
+    method_name, *rest = method_spec.split("(", 1)
+    method = getattr(obj, method_name)
+    if rest:
+        kwargs = eval("dict(%s" % rest[0])
+
+    sig = inspect.signature(method)
+    needed = OrderedDict(sig.parameters.items())
+    result = method
+    # Only allow unspecified values to be given.
+    for k in kwargs.keys():
+        del needed[k]
+    result = partial(method, **kwargs)
+
+    return result, needed
+
 class ModelSpecifier(argparse.Action):
     def __init__(self,
                  option_strings,
@@ -112,7 +130,6 @@ def apply_fn_args(fn_name, needed_params, param_types, fn, raw_args):
     kw = vars(p.parse_args(raw_args))
     return fn(**kw)
 
-
 def run(argns, remaining_args):
     model = None
     exporting = argns.export is not None or argns.export_doc is not None
@@ -128,13 +145,24 @@ def run(argns, remaining_args):
 
         if method_raw_args:
             method_name, method_raw_args = method_raw_args[0], method_raw_args[1:]
-            method = getattr(model, method_name)
-            apply_fn_args(
+            method, needed = resolve_method_and_needed(model, method_name)
+            result = apply_fn_args(
                     method_name,
-                    inspect.signature(method).parameters,
-                    lambda param: {'help': "%s %s" % (tf.as_dtype(param.annotation.dtype).name, tf.TensorShape(param.annotation.tensor_shape)) },
+                    needed,
+                    lambda param: {
+                            'help': "%s %s" % (tf.as_dtype(param.annotation.dtype).name, tf.TensorShape(param.annotation.tensor_shape)),
+                            'type': lambda o: tfi.data.file(o[1:]) if o.startswith("@") else o,
+                        },
                     method,
                     method_raw_args)
+
+            tensor = tfi.maybe_as_tensor(result, None, None)
+            accept_mimetypes = {"image/png": tfi.data.terminal.imgcat, "text/plain": lambda x: x}
+            result_val = tfi.data._encode(tensor, accept_mimetypes)
+            if result_val is None:
+                result_val = result
+            result_str = '%r\n' % (result_val, )
+            print(result_str)
         else:
             argns.interactive = not exporting
     else:

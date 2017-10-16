@@ -2,6 +2,7 @@ import mimetypes
 
 from tfi.as_tensor import as_tensor as _as_tensor
 from tfi.as_tensor import from_tensor as _from_tensor
+from tfi.as_tensor import ShapeMismatchException as _ShapeMismatchException
 
 import tensorflow as tf
 
@@ -41,7 +42,7 @@ class _ImageBytes(Decoder):
             #     know which one we're dealing with and return None if the
             #     format doesn't match the requested shape.
             if shape_len > 3:
-                return TensorShape(shape[-3:])
+                raise _ShapeMismatchException(dtype, shape[-3:])
             channels = shape[-1]
             h = shape[-3]
             w = shape[-2]
