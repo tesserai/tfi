@@ -138,9 +138,6 @@ class GoogleDocstring(object):
         self._obj = obj
         if isinstance(docstring, str):
             docstring = _prepare_docstring(docstring)
-            print("prepared docstring...", docstring)
-        else:
-            print("didn't prepare docstring...", docstring)
         self._lines = docstring
         self._line_iter = modify_iter(docstring, modifier=lambda s: s.rstrip())
         self._parsed_lines = []  # type: List[unicode]
