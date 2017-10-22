@@ -1,3 +1,9 @@
+import base64
+
+from tfi.as_tensor import maybe_as_tensor
+from tfi.data import terminal
+from tfi.data import _encode
+
 from tfi.doc.docstring import GoogleDocstring as _GoogleDocstring
 from tfi.doc.arxiv import discover_arxiv_ids as _discover_arxiv_ids
 from tfi.doc.arxiv import ArxivBibtexRepo as _ArxivBibtexRepo
@@ -5,6 +11,38 @@ from tfi.doc.arxiv2bib import arxiv2bib as _arxiv2bib
 from tfi.doc.git import git_authorship as _git_authorship
 from tfi.doc.git import GitUserRepo as _GitUserRepo
 from tfi.doc import template as _template
+
+def _run_example(m, example_src):
+    s = """
+import tfi, numpy as np
+
+m = tfi.saved_model("//tensorflow/magenta/image_stylization")
+
+_ = m.stylize(images=[tfi.data.file("data/kodim01.png")],
+          style_weights=np.identity(m.hparams().num_styles)[7])[0][0]
+    """
+
+    e = """
+_prev_file = tfi.data.file
+__trapped__ = []
+def wrap_file(p):
+    global _prev_file, __trapped__
+    r = _prev_file(p)
+    __trapped__.append((p, r))
+    return r
+
+tfi.data.file = wrap_file
+    """
+
+    import re
+    example_src = s
+    source = re.sub(r'm = tfi.saved_model.+', e, example_src)
+
+    l = {'m': m}
+    g = {}
+    exec(source, g, l)
+
+    return g['__trapped__'], l['_']
 
 def save(path, model):
     # if not isinstance(model, Base):
@@ -28,6 +66,7 @@ def save(path, model):
     elif hasattr(model, '__tfi_module__'):
         git_authorship_file = model.__tfi_module__.__file__
 
+    print("git_authorship_file", git_authorship_file)
     git = _git_authorship(github_user_repo, git_authorship_file)
 
     if len(model_doc_sections) > 0:
@@ -47,6 +86,56 @@ def save(path, model):
             for part in parts[:-1]
         ]
         return " ".join(parts)
+
+    class escaped(object):
+        def __init__(self, s):
+            self.s = s
+        def __repr__(self):
+            return self.s
+
+    def img_png_html(d):
+        return escaped("""<img src="data:image/png;base64,%s">""" % base64.b64encode(d).decode())
+
+    def text_plain(d):
+        print("text_plain", d)
+        return d
+
+    def inspect(o):
+        tensor = maybe_as_tensor(o, None, None)
+        accept_mimetypes = {"image/png": img_png_html, "text/plain": text_plain}
+        val = _encode(tensor, accept_mimetypes)
+        if val is None:
+            val = o
+        return '%r' % val
+
+    def prep_method(method_name, method_doc):
+        example_args = None
+        for t, r in method_doc['sections']:
+            if t == 'example args':
+                example_args = r
+                break
+
+        example_expanded = []
+        example_result = None
+        if method_name == "stylize" and example_args is not None:
+            trapped, result = _run_example(model, example_args)
+
+            for name, t in trapped:
+                example_expanded.append((name, inspect(t)))
+
+            example_result = inspect(result)
+
+        return {
+            "name": method_name,
+            "sections": method_doc['sections'],
+            "args": method_doc['args'],
+            "example args": example_args,
+            "example expanded": example_expanded,
+            "example result": example_result,
+            "returns": method_doc['returns'],
+        }
+
+    print("references", references)
 
     template_args = {
         "title": model.__name__ if hasattr(model, '__name__') else type(model).__name__,
@@ -69,12 +158,7 @@ def save(path, model):
         ],
         "sections": model_doc_sections,
         "methods": [
-            {
-                "name": method_name,
-                "sections": method_doc['sections'],
-                "args": method_doc['args'],
-                "returns": method_doc['returns'],
-            }
+            prep_method(method_name, method_doc)
             for method_name, method_doc in model.__tfi_signature_def_docs__.items()
         ],
         "references": references,

@@ -49,11 +49,15 @@ class _ImageBytes(Decoder):
 
         contents = _as_tensor(self.bytes, None, None)
         image = tf.image.decode_image(contents, channels=channels)
+
+        # Assumes we're decoding a jpeg or png, not gif.
+        image.set_shape([None, None, None])
+
         if dtype is not None and dtype != image.dtype:
             image = tf.image.convert_image_dtype(image, dtype=dtype)
 
         if w is not None or h is not None:
-            image = tf.image.resize_image_with_crop_or_pad(image, target_height=h, target_width=w)
+            image = tf.image.resize_images(image, tf.constant([h, w]))
 
         return image
 

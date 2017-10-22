@@ -1,0 +1,441 @@
+html {
+  font-size: 16px;
+  font-family: Whitney SSm A,Whitney SSm B,Helvetica Neue,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+#content {
+  padding-top: 7.5rem;
+  color: #4c555a;
+}
+/*
+#head {
+  margin-left: 24px;
+  margin-right: 24px;
+  box-sizing: border-box;
+  width: auto;
+}
+
+@media (min-width: 768px) {
+  #head {
+    margin-left: 72px;
+    margin-right: 72px;
+  }
+}
+
+@media (min-width: 1080px) {
+  #head {
+    width: 984px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}*/
+
+#head {
+  max-width: 54%;
+  text-align: center;
+  margin: auto;
+}
+
+.method .method-copy {
+  width: calc(54% - 9rem);
+  padding: 0 2rem 4rem 7rem;
+}
+
+#appendix {
+  padding-top: 2rem;
+  padding-left: 8rem;
+  padding-right: 8rem;
+}
+
+#appendix section {
+  /*max-width: 45rem;*/
+}
+
+.source-code-ref a {
+  color: #43b290;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.source-code-ref .commit {
+  color: #cacaca;
+  font-size: 0.75rem;
+}
+
+h1 {
+  font-size: 2.625rem;
+  font-weight: 300;
+  line-height: 1.4;
+  padding: 1.5rem 0;
+}
+
+
+h1 {
+  /*border-bottom: 0.8px solid #eee ;*/
+}
+
+#authorship {
+  border-bottom: 0.8px solid #eee;
+  /*border-top: 0.8px solid #eee;*/
+}
+
+h2 {
+  color: #414040;
+  font-size: 1.375rem;
+  font-weight: 300;
+  line-height: 1.3;
+  letter-spacing: -1px;
+  padding: 1.4rem 0 3.5rem 0;
+
+  margin-bottom: 0;
+}
+
+#authorship {
+  padding-top: 2.5rem;
+  padding-bottom: 2.5rem;
+
+  /*margin-bottom: 41.6rem;*/
+}
+
+.author {
+  display: inline-block;
+  font-size: 0.875rem;
+  margin-right: 2.8rem;
+  margin-bottom: 1.4rem;
+  width: 9em;
+}
+
+.author a {
+  text-decoration: none;
+}
+
+.author-name, .author-role {
+  display: block;
+}
+
+.author-name a {
+  color: #bebebe;
+  font-weight: 600;
+  text-transform: lowercase;
+  font-variant: small-caps;
+  line-height: 1.1;
+}
+
+.author-role a {
+  color: #bebebe;
+  line-height: 1.8;
+  font-size: 0.75rem;
+}
+
+.method h1 {
+  font-size: 1.4375rem;
+  font-weight: 400;
+  border-bottom: none;
+  color: #272B2D;
+}
+
+p {
+  /*color: #979797;*/
+  font-size: 1rem;
+  font-weight: 300;
+  line-height: 1.6;
+}
+
+.method .method-copy-padding > p:first-of-type {
+  margin-top: -1.8rem;
+}
+
+.method-list {
+  margin: 1.7rem 0 0;
+}
+
+.method h4 {
+  font-size: 1rem;
+  color: #2da0e5;
+  border: none;
+
+  text-transform: lowercase;
+  font-variant: small-caps;
+  margin-bottom: 1rem;
+}
+
+.method-list-item-label,
+.method-list-item-description {
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.method-list-group {
+  padding: 0;
+  border-top: 1px solid #e1e8ed;
+  /*box-shadow: 0 1px 2px 0 rgba(0,0,0,0.10), 0 3px 11px 0 rgba(0,0,0,0.01);*/
+  /*border-radius: 0.2rem;*/
+  /*background-color: rgba(0, 0, 0, 0.02);*/
+}
+
+.method-list-item:not(:last-of-type) {
+  border-bottom: 1px solid #f0f4f7;
+}
+
+.method-list-item {
+  margin: 0;
+  padding: 2rem 0 2.8rem 0;
+  list-style: none;
+}
+
+.method-list.inputs h4::before {
+  content: "→ inputs";
+}
+
+.method-list.outputs h4::before {
+  content: "← outputs";
+}
+
+.method-list-item-label {
+  margin: 0;
+  position: relative;
+  float: left;
+  text-align: right;
+  width: 10rem;
+}
+
+
+.method-list-item-label-details {
+  display: block;
+  font-size: 0.75rem;
+  color: #939da3;
+  font-weight: 540;
+  /*line-height: 2;*/
+  margin-top: 0.3rem;
+}
+
+
+.method-list-item-description {
+  /*color: #bebebe;*/
+  font-weight: 400;
+  line-height: 1.5;
+  font-size: 0.875rem;
+  margin-left: 12rem;
+  margin-bottom: 0;
+  margin-top: 0;
+}
+
+/*.method-list-group::before, .method-list-item::before {
+  content: "";
+  display: table;
+}*/
+
+
+.method-list, .method-list-item::after {
+  clear: both;
+}
+
+.method-list-title {
+  margin: 0;
+}
+
+.method-area {
+  overflow: hidden;
+}
+
+.method-example-declaration::before {
+  content: "Definition";
+}
+
+.method-example-input::before {
+  content: "Example input";
+}
+
+.method-example-output::before {
+  content: "Example output";
+}
+
+.method-example-declaration::before,
+.method-example-input::before,
+.method-example-output::before {
+  display: inline-block;
+  color: #d0d4d7;
+  text-transform: lowercase;
+  font-variant: small-caps;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.method-example-declaration::before,
+.method-example-input::before,
+.method-example-output::before,
+.method-list-group {
+  margin-bottom: 1rem;
+}
+
+.method-example-declaration,
+.method-example-input,
+.method-example-output {
+  overflow: hidden;
+}
+
+
+.method .method-copy {
+  float: left;
+}
+
+.method-example {
+  position: relative;
+  margin-left: 54%;
+  /*padding: 42px 0 54px;*/
+}
+
+.language-python {
+  font-family: Source Code Pro,Menlo,monospace;
+  background-color: transparent;
+}
+
+.method-example pre {
+  display: block;
+  color: #d0d0d0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background-color: #272b2d;
+  border-radius: 5px;
+  line-height: 1.5;
+  font-family: Source Code Pro,Menlo,monospace;
+  margin: 0;
+  padding: 1.25rem 2rem;
+  font-size: 0.875rem;
+}
+
+.method-copy {
+  clear: both;
+}
+
+.method-example::before {
+  clear: both;
+}
+
+
+.method-example-part {
+  padding: 1.875rem 2rem;
+}
+
+.method-example-declaration:first-of-type {
+  padding-top: 0;
+}
+
+#background {
+  /*position: sticky;
+  right: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;*/
+}
+
+#rest {
+  margin-top: 5rem;
+  position: relative;
+}
+
+#background {
+  bottom: 0;
+  left: 54%;
+  position: absolute;
+  right: 0;
+  top: 0;
+  background: #2d3134;
+  z-index: -1;
+
+  border-top-left-radius: 0.5rem;
+
+}
+
+#appendix {
+  /*margin-top: 51rem;*/
+  margin-top: 10rem;
+  color: #555;
+  background-color: #fbfbfb;
+}
+
+#appendix h3 {
+  color: #777;
+  font-size: 1.125rem;
+  text-transform: lowercase;
+  font-variant: small-caps;
+  margin-bottom: 0;
+}
+
+#appendix ul {
+  margin: 0;
+}
+
+#appendix section {
+  margin-bottom: 4rem;
+}
+
+#appendix p, #appendix a {
+  /*font-size: 0.875rem;*/
+}
+
+#appendix a {
+  color: rgba(0, 0, 0, 0.6);
+}
+
+#appendix .method-list {
+  margin: 1.2rem 0 0;
+}
+
+/*.method-example-part {
+  margin: 1.2rem 0 0;
+}*/
+
+#appendix .method-list-group {
+  /*background: #fefefe;*/
+  /*border-top: 1px solid #e1e8ed;*/
+  border-top: 0px;
+}
+
+#appendix .method-list-item:not(:last-of-type) {
+  /*border-bottom: 1px solid #f0f4f7;*/
+  border-bottom: 0px;
+}
+
+#appendix .method-list-item {
+  margin: 0;
+  background-color: transparent;
+  padding: 1.4rem 0 3rem 0;
+}
+
+#appendix .method-list-item-label {
+  /*color: #d7d7d7;*/
+  font-weight: 540;
+}
+
+#appendix .method-list-item-label-details {
+  margin-top: 0.3rem;
+}
+
+#appendix .method-list-item-label,
+#appendix .method-list-item-description {
+  /*font-size: 0.75rem;*/
+  line-height: 1.4;
+}
+
+#appendix .references {
+  /*font-size: 0.875rem;*/
+}
+
+#appendix .references ol {
+  padding-left: 1.5rem;
+}
+
+#appendix .references li {
+  line-height: 1.8;
+}
+/*.method-example {
+  margin-left: calc(54% - 984px / 2 + 648px);
+}*/

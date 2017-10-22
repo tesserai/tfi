@@ -44,7 +44,7 @@ def _resolve_instance_method_tensors(instance, fn):
 
     def _tensor_info_str(tensor):
         if tensor.shape.ndims is None:
-            return tensor.dtype.name
+            return "%s ?" % tensor.dtype.name
 
         return "%s <%s>" % (
             tensor.dtype.name,

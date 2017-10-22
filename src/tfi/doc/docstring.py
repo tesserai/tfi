@@ -154,6 +154,8 @@ class GoogleDocstring(object):
         self._freeform_sections = {
             'example': self._parse_generic_section,
             'examples': self._parse_generic_section,
+            'example args': self._parse_generic_section,
+            'example returns': self._parse_generic_section,
             'note': self._parse_generic_section,
             'references': self._parse_generic_section,
             'see also': self._parse_generic_section,
