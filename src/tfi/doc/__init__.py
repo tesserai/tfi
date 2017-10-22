@@ -3,6 +3,7 @@ from tfi.doc.arxiv import discover_arxiv_ids as _discover_arxiv_ids
 from tfi.doc.arxiv import ArxivBibtexRepo as _ArxivBibtexRepo
 from tfi.doc.arxiv2bib import arxiv2bib as _arxiv2bib
 from tfi.doc.git import git_authorship as _git_authorship
+from tfi.doc.git import GitUserRepo as _GitUserRepo
 from tfi.doc import template as _template
 
 def save(path, model):
@@ -10,6 +11,8 @@ def save(path, model):
     #     raise Exception("%s is not an instance of Base" % model)
 
     arxiv_repo = _ArxivBibtexRepo("arxiv.json", _arxiv2bib)
+    github_user_repo = _GitUserRepo("github-users.json")
+
     references = []
     if model.__doc__:
         model_doc_sections, _ = _GoogleDocstring(obj=model).result()
@@ -17,10 +20,15 @@ def save(path, model):
     else:
         model_doc_sections = []
 
+    git_authorship_file = None
     if hasattr(model, '__file__'):
-        git = _git_authorship(model.__file__)
-    else:
-        git = {'authors': []}
+        git_authorship_file = model.__file__
+    elif hasattr(model, '__tfi_file__'):
+        git_authorship_file = model.__tfi_file__
+    elif hasattr(model, '__tfi_module__'):
+        git_authorship_file = model.__tfi_module__.__file__
+
+    git = _git_authorship(github_user_repo, git_authorship_file)
 
     if len(model_doc_sections) > 0:
         subhead = "\n".join(model_doc_sections[0][1])
@@ -43,11 +51,16 @@ def save(path, model):
     template_args = {
         "title": model.__name__ if hasattr(model, '__name__') else type(model).__name__,
         "subhead": subhead,
+        "source": {
+            "url": git["url"],
+            "label": git["label"],
+            "commit": git["commit"][:7],
+        },
         "authors": [
            *[
                 {
-                    "url": "mailto:%s" % author['email'],
                     "name": shorten_author_name(author['name'], 14),
+                    "url": author['url'],
                     "affiliation_name": "Code Contributor",
                     "affiliation_url": author['commits_url'],
                 }
