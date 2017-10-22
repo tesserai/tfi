@@ -28,14 +28,26 @@ def save(path, model):
     else:
         subhead = ""
 
+    def shorten_author_name(name, max):
+        if len(name) < max:
+            return name
+
+        parts = name.split(" ")
+        # Shorten to first initial of each part
+        parts[:-1] = [
+            "%s." % part[0] if len(part) > 2 and part[0].isalpha() else part
+            for part in parts[:-1]
+        ]
+        return " ".join(parts)
+
     template_args = {
         "title": model.__name__ if hasattr(model, '__name__') else type(model).__name__,
         "subhead": subhead,
         "authors": [
            *[
                 {
-                    "name": author['name'],
                     "url": "mailto:%s" % author['email'],
+                    "name": shorten_author_name(author['name'], 14),
                     "affiliation_name": "Code Contributor",
                     "affiliation_url": author['commits_url'],
                 }
