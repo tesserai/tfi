@@ -144,14 +144,14 @@ class GoogleDocstring(object):
         self._is_in_section = False
         self._section_indent = 0
         self._directive_sections = []  # type: List[unicode]
-        self._dict_sections = {
+        self._entry_sections = {
             'args': self._parse_fields_section,
             'attributes': self._parse_fields_section,
             'returns': self._parse_fields_section,
             'yields': self._parse_fields_section,
         }  # type: Dict[unicode, Callable]
 
-        self._list_sections = {
+        self._freeform_sections = {
             'example': self._parse_generic_section,
             'examples': self._parse_generic_section,
             'note': self._parse_generic_section,
@@ -162,12 +162,12 @@ class GoogleDocstring(object):
 
         self._sections = {
             name: value
-            for name, value in [*self._dict_sections.items(), *self._list_sections.items()]
+            for name, value in [*self._entry_sections.items(), *self._freeform_sections.items()]
         }
 
         self._parsed_dicts = {
             name: []
-            for name in self._dict_sections.keys()
+            for name in self._entry_sections.keys()
         }
         self._parse()
 
@@ -193,7 +193,7 @@ class GoogleDocstring(object):
             The lines of the docstring in a list.
 
         """
-        return self._parsed_lines, self._parsed_dicts
+        return {'sections': self._parsed_lines, **self._parsed_dicts}
 
     def _consume_indented_block(self, indent=1):
         # type: (int) -> List[unicode]

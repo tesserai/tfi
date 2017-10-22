@@ -69,8 +69,7 @@ def _resolve_instance_method_tensors(instance, fn):
     ])
 
     if fn.__doc__:
-        doc_sections, doc = GoogleDocstring(obj=fn).result()
-        doc['sections'] = doc_sections
+        doc = GoogleDocstring(obj=fn).result()
     else:
         doc = {'sections': [], 'args': {}, 'returns': {}}
     doc['args'] = _enrich_docs(doc['args'], input_tensors)

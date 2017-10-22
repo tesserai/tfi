@@ -14,11 +14,11 @@ def save(path, model):
     github_user_repo = _GitUserRepo("github-users.json")
 
     references = []
+    model_doc_sections = []
     if model.__doc__:
-        model_doc_sections, _ = _GoogleDocstring(obj=model).result()
+        model_doc = _GoogleDocstring(obj=model).result()
+        model_doc_sections = model_doc['sections']
         references.extend(arxiv_repo.resolve(_discover_arxiv_ids(model)))
-    else:
-        model_doc_sections = []
 
     git_authorship_file = None
     if hasattr(model, '__file__'):
