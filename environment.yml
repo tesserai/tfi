@@ -1,0 +1,16 @@
+name: someenv
+channels:
+  - defaults
+  - conda-forge
+  - soumith
+dependencies:
+  - python=3.6
+  - numpy=1.12
+  - pytorch
+  - torchvision
+  - pip:
+    - requests==2.14.2
+    - Flask==0.12.2
+    - gunicorn==19.7.1
+    - tinydb
+    - pygments

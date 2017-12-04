@@ -13,7 +13,7 @@ with open(__file__[:-2] + "css") as f:
 # 'vim', 'vs', 'tango', 'rrt', 'xcode', 'igor', 'paraiso-light', 'paraiso-dark', 'lovelace', 'algol', 'algol_nu', 'arduino', 'rainbow_dash', 'abap']
 
 from pygments.styles import get_all_styles
-print(list(get_all_styles()))
+# print(list(get_all_styles()))
 
 def _render_section(type, contents):
     if type == "text":
@@ -41,7 +41,6 @@ _page_template = """<!doctype html>
   </head>
 
   <body id="documentation" class="">
-    <!-- <img src="../design/steps/TFI_v2/preview/page-1-desktop-hd-copy-20.png" style="position: absolute; overflow: hidden; opacity: 0.5; z-index: -1; left: 0; top: 0; width: 1440px;"/> -->
     <div id="content">
     <div id="head">
         <div class="source-code-ref">
@@ -88,79 +87,102 @@ _page_template = """<!doctype html>
 </html>
 
 <script type="text/bibliography">
-
   $bibliography_fragment
 </script>
 """
 
+import re
 
+# Inspired by https://github.com/distillpub/template/blob/master/components/citation.js
+def bibtex_link_string(ent):
+    if "url" not in ent:
+        return ""
 
+    url = ent['url']
+    arxiv_match = re.search(r'arxiv\.org/abs/([0-9\.v]*)', url)
+    if arxiv_match is not None:
+        url = "https://arxiv.org/pdf/%s.pdf" % arxiv_match[1]
 
-# // From https://github.com/distillpub/template/blob/master/components/citation.js
+    label = "link"
+    if url.endswith(".pdf"):
+        label = "PDF";
+    elif url.endswith(".html"):
+        label = "HTML";
+
+    return ' &ensp;<a href="%s">[%s]</a>' % (url, label)
+
+def bibtex_venue_string(ent):
+    cite = ent.get('journal', None) or ent.get('booktitle', None) or ""
+    if "volume" in ent:
+        issue = ent.get('issue', None) or ent.get('number', None)
+        issue = "("+issue+")" if issue is not None else ""
+        cite += ", Vol " + ent['volume'] + issue;
+
+    if "pages" in ent:
+        cite += ", pp. " + ent['pages']
+
+    if cite != "":
+        cite += ". "
+
+    if "publisher" in ent:
+        cite += ent['publisher']
+        if cite[-1] != ".":
+            cite += "."
+
+    return cite
+
+def bibtex_author_string(ent, template, sep, final_sep):
+    names = ent['author'].split(" and ");
+
+    def name_str(name):
+        name = name.strip()
+
+        if "," in name:
+            splitname = name.split(",")
+            last = splitname[0].strip()
+            firsts = splitname[1]
+        else:
+            last = name.split(" ")[-1].strip()
+            firsts = " ".join(name.split(" ")[:-1])
+
+        initials = ".".join([s.strip()[0] for s in firsts.strip().split(" ")]) + "."
+        return Template(template).substitute(F=firsts, L=last, I=initials)
+
+    name_strs = [name_str(name) for name in names]
+    if len(name_strs) > 1:
+        return sep.join(name_strs[:-1]) + (final_sep or sep) + name_strs[-1]
+    else:
+        return name_strs[0]
+
+def bibtex_doi_string(ent, newline=False):
+    if "doi" not in ent:
+        return ""
+
+    return '%s <a href="https://doi.org/%s" style="text-decoration:inherit;">DOI: %s</a>' % (
+        "<br>" if newline else "",
+        ent['doi'],
+        ent['doi'],
+    )
+
+def bibliography_cite(ent):
+    if ent is None:
+        return "?"
+
+    cite = "<b>" + ent['title'] + "</b> "
+    cite += bibtex_link_string(ent) + "<br>"
+    cite += bibtex_author_string(ent, "${L}, ${I}", ", ", " and ")
+    if 'year' in ent or 'date' in ent:
+        cite += ", " + (ent['year'] or ent['date']) + ". "
+    else:
+        cite += ". "
+
+    cite += bibtex_venue_string(ent)
+    cite += bibtex_doi_string(ent)
+    return cite
+
+# //
 # // TODO(adamb) Port this parsing logic to Python and use it to generate links.
-#   function link_string(ent){
-#     if ("url" in ent){
-#       var url = ent.url;
-#       var arxiv_match = (/arxiv\.org\/abs\/([0-9\.]*)/).exec(url);
-#       if (arxiv_match != null){
-#         url = `http://arxiv.org/pdf/$${arxiv_match[1]}.pdf`;
-#       }
 #
-#       if (url.slice(-4) == ".pdf"){
-#         var label = "PDF";
-#       } else if (url.slice(-5) == ".html") {
-#         var label = "HTML";
-#       }
-#       return ` &ensp;<a href="$${url}">[$${label||"link"}]</a>`;
-#     } else {
-#       return "";
-#     }
-#   }
-#
-#   function venue_string(ent) {
-#     var cite = (ent.journal || ent.booktitle || "")
-#     if ("volume" in ent){
-#       var issue = ent.issue || ent.number;
-#       issue = (issue != undefined)? "("+issue+")" : "";
-#       cite += ", Vol " + ent.volume + issue;
-#     }
-#     if ("pages" in ent){
-#       cite += ", pp. " + ent.pages
-#     }
-#     if (cite != "") cite += ". "
-#     if ("publisher" in ent){
-#       cite += ent.publisher;
-#       if (cite[cite.length-1] != ".") cite += ".";
-#     }
-#     return cite;
-#   }
-#
-#
-#   function doi_string(ent, new_line){
-#     if ("doi" in ent) {
-#       return `$${new_line?"<br>":""} <a href="https://doi.org/$${ent.doi}" style="text-decoration:inherit;">DOI: $${ent.doi}</a>`;
-#     } else {
-#       return "";
-#     }
-#   }
-#
-#   function bibliography_cite(ent, fancy){
-#     if (ent){
-#       var cite =  "<b>" + ent.title + "</b> "
-#       cite += link_string(ent) + "<br>";
-#       cite += author_string(ent, "$${L}, $${I}", ", ", " and ");
-#       if (ent.year || ent.date){
-#         cite += ", " + (ent.year || ent.date) + ". "
-#       } else {
-#         cite += ". "
-#       }
-#       cite += venue_string(ent);
-#       cite += doi_string(ent);
-#       return cite
-#     } else {
-#       return "?";
-#     }
-#   }
 
 
 
@@ -179,7 +201,7 @@ def render(
         authors,
         title,
         subhead,
-        sections,
+        paragraphs,
         methods,
         references):
     # pprint(methods)
@@ -271,9 +293,9 @@ def render(
                 example_fragment=example_fragment)
 
     return t.substitute(
-            source_repo_url=source['url'],
-            source_repo_label=source['label'],
-            source_repo_commit=source['commit'],
+            source_repo_url=source.get('url', None),
+            source_repo_label=source.get('label', None),
+            source_repo_commit=source.get('commit', None),
             authors_fragment="\n".join([
                 Template("""<span class="author">
                   <span class="author-name"><a href="$url">$author</a></span>
@@ -287,9 +309,17 @@ def render(
             style_fragment=_style_fragment,
             title=title,
             subhead=subhead,
-            sections_fragment="\n".join([
-                _render_section(type, contents)
-                for type, contents in sections]),
+            sections_fragment="""
+            <section class="method">
+                <div class="method-area">
+                    <div class="method-copy">
+                        <h1>Overview</h1>
+                        <div class="method-copy-padding">
+                        %s
+                        </div>
+                    </div>
+                </div>
+            </section>""" % "\n".join(["<p>%s</p>" % p for p in paragraphs]) if len(paragraphs) > 0 else "",
             methods_fragment="\n".join([
                 Template("""
             <section class="method">
@@ -327,13 +357,5 @@ def render(
             hyperparameters_fragment=render_args('hyperparameters', hyperparameters, None, None),
             bibliography_fragment=references,
             references_fragment="\n".join([
-                Template("""<li>
-                    <b>$title</b>&nbsp;&nbsp;&nbsp;<a href="$pdf_url">[PDF]</a>
-                    <br>
-                    $authors_fragment
-                </li>""").substitute(
-                    title=title,
-                    pdf_url=pdf_url,
-                    authors_fragment=", ".join(authors)
-                )
-                for title, pdf_url, authors in references]))
+                "<li>%s</li>" % bibliography_cite(bibtex_entry)
+                for bibtex_entry in references]))

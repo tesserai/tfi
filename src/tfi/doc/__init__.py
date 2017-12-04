@@ -1,8 +1,9 @@
 import base64
+import sys
 
 from tfi.as_tensor import maybe_as_tensor
 from tfi.data import terminal
-from tfi.data import _encode
+from tfi.data.pytorch import _encode
 
 from tfi.doc.docstring import GoogleDocstring as _GoogleDocstring
 from tfi.doc.arxiv import discover_arxiv_ids as _discover_arxiv_ids
@@ -11,6 +12,8 @@ from tfi.doc.arxiv2bib import arxiv2bib as _arxiv2bib
 from tfi.doc.git import git_authorship as _git_authorship
 from tfi.doc.git import GitUserRepo as _GitUserRepo
 from tfi.doc import template as _template
+
+from tfi.doc.biblib import bib as _bib
 
 def _run_example(m, example_src):
     s = """
@@ -44,7 +47,9 @@ tfi.data.file = wrap_file
 
     return g['__trapped__'], l['_']
 
-def save(path, model):
+from pprint import pprint
+
+def documentation(model):
     # if not isinstance(model, Base):
     #     raise Exception("%s is not an instance of Base" % model)
 
@@ -66,14 +71,48 @@ def save(path, model):
     elif hasattr(model, '__tfi_module__'):
         git_authorship_file = model.__tfi_module__.__file__
 
-    print("git_authorship_file", git_authorship_file)
-    git = _git_authorship(github_user_repo, git_authorship_file)
 
+    bibparser = _bib.Parser()
+    for reference in references:
+        bibparser.parse(reference, log_fp=sys.stderr)
+    bibtex_entries = bibparser.get_entries()
+
+    print("git_authorship_file", git_authorship_file)
+    git = None
+    authors = []
+    if git_authorship_file:
+        git = _git_authorship(github_user_repo, git_authorship_file)
+        authors = git['authors']
+
+    paragraphs = []
+    subhead = ""
     if len(model_doc_sections) > 0:
-        subhead = "\n".join(model_doc_sections[0][1])
-        model_doc_sections = model_doc_sections[1:]
-    else:
-        subhead = ""
+        pprint(model_doc_sections)
+
+        text_sections = [v for t, v in model_doc_sections if t == 'text']
+        for text_section in text_sections:
+            paragraph_lines = []
+
+            for line in text_section:
+                if len(line) > 0:
+                    paragraph_lines.append(line)
+                    continue
+
+                if len(paragraph_lines) == 0:
+                    # Ignore multiple lines between paragraphs.
+                    continue
+
+                # This paragraph is done.
+                paragraphs.append("\n".join(paragraph_lines))
+                paragraph_lines = []
+
+
+            if len(paragraph_lines) > 0:
+                paragraphs.append("\n".join(paragraph_lines))
+
+        pprint(paragraphs)
+        subhead = paragraphs[0]
+        paragraphs = paragraphs[1:]
 
     def shorten_author_name(name, max):
         if len(name) < max:
@@ -135,16 +174,14 @@ def save(path, model):
             "returns": method_doc['returns'],
         }
 
-    print("references", references)
-
-    template_args = {
+    return {
         "title": model.__name__ if hasattr(model, '__name__') else type(model).__name__,
         "subhead": subhead,
         "source": {
             "url": git["url"],
             "label": git["label"],
             "commit": git["commit"][:7],
-        },
+        } if git else {},
         "authors": [
            *[
                 {
@@ -153,14 +190,21 @@ def save(path, model):
                     "affiliation_name": "Code Contributor",
                     "affiliation_url": author['commits_url'],
                 }
-                for author in git['authors']
+                for author in authors
             ],
         ],
-        "sections": model_doc_sections,
+        "paragraphs": paragraphs,
         "methods": [
             prep_method(method_name, method_doc)
             for method_name, method_doc in model.__tfi_signature_def_docs__.items()
         ],
-        "references": references,
+        "references": list(bibtex_entries.values()),
     }
+
+def render(model):
+    template_args = documentation(model)
+    return _template.render(**template_args)
+
+def save(path, model):
+    template_args = documentation(model)
     _template.write(path, **template_args)

@@ -7,7 +7,14 @@ import inspect
 from prompt_toolkit.layout.utils import token_list_width
 from ptpython.repl import _lex_python_result
 
+from io import StringIO
 import tfi.data
+
+import tfi.data.pretty as _pretty
+
+
+def _ndarray_pprint(obj, p, cycle):
+    pass
 
 def _configure_repl(repl):
     class TfiPrompt(PromptStyle):
@@ -58,9 +65,21 @@ def _configure_repl(repl):
                 if result is not None:
                     out_tokens = self.get_output_prompt_tokens(cli)
 
-                    tensor = tfi.maybe_as_tensor(result, None, None)
-                    accept_mimetypes = {"image/png": tfi.data.terminal.imgcat, "text/plain": lambda x: x}
-                    result_val = tfi.data._encode(tensor, accept_mimetypes)
+                    try:
+                        tensor = tfi.maybe_as_tensor(result, None, None)
+                        accept_mimetypes = {"image/png": tfi.data.terminal.imgcat, "text/plain": lambda x: x}
+                        result_val = tfi.data._encode(tensor, accept_mimetypes)
+                    except TypeError:
+                        result_val = result
+                    except Exception:
+                        result_val = result
+
+                    # output_s = StringIO()
+                    # rprinter = _pretty.RepresentationPrinter(output_s)
+                    # rprinter.type_pprinters[numpy.ndarray] = _ndarray_pprint
+                    # rprinter.pretty(result)
+                    # result_str = output_s.getvalue()
+
                     if result_val is None:
                         result_val = result
                     try:

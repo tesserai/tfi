@@ -191,11 +191,11 @@ p {
 }
 
 .method-list.inputs h4::before {
-  content: "→ inputs";
+  content: "\u2192 inputs";
 }
 
 .method-list.outputs h4::before {
-  content: "← outputs";
+  content: "\u2190 outputs";
 }
 
 .method-list-item-label {
@@ -373,8 +373,12 @@ p {
   margin: 0;
 }
 
-#appendix section {
+#appendix section:not(:last-of-type) {
   margin-bottom: 4rem;
+}
+
+#appendix section:last-of-type {
+  padding-bottom: 4rem;
 }
 
 #appendix p, #appendix a {

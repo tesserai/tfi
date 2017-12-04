@@ -1,0 +1,7 @@
+Dockerfile
+dist/
+scratch/
+tests/
+tf_python_env/
+venv/
+zoo/
