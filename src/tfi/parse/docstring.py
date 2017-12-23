@@ -18,7 +18,7 @@ import re
 # from six import string_types, u
 # from six.moves import range
 
-from tfi.doc.iterators import modify_iter
+from .iterators import modify_iter
 
 import sys
 def _prepare_docstring(s, ignore=1):
@@ -149,12 +149,12 @@ class GoogleDocstring(object):
             'attributes': self._parse_fields_section,
             'returns': self._parse_fields_section,
             'yields': self._parse_fields_section,
+            'example args': self._parse_fields_section,
         }  # type: Dict[unicode, Callable]
 
         self._freeform_sections = {
             'example': self._parse_generic_section,
             'examples': self._parse_generic_section,
-            'example args': self._parse_generic_section,
             'example returns': self._parse_generic_section,
             'note': self._parse_generic_section,
             'references': self._parse_generic_section,

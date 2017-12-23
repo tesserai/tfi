@@ -18,23 +18,14 @@ from tensorflow.python.client import session
 from tensorflow.python.debug.wrappers import local_cli_wrapper
 from tensorflow.python.framework import ops as ops_lib
 
-from tfi.as_tensor import as_tensor
-from tfi.doc.docstring import GoogleDocstring
+from tfi.base import _GetAttrAccumulator
 
-class _GetAttrAccumulator:
-    def __init__(self, gotten=None):
-        if gotten is None:
-            gotten = []
-        self._gotten = gotten
+from tfi.parse.docstring import GoogleDocstring
 
-    def __getattr__(self, name):
-        return _GetAttrAccumulator([*self._gotten, name])
+from tfi.tensor.codec import _BaseAdapter
+from tfi.tf.tensor_codec import as_tensor
 
-    def __call__(self, target):
-        result = target
-        for name in self._gotten:
-            result = getattr(result, name)
-        return result
+import tfi.tf.checkpoint
 
 def _resolve_instance_method_tensors(instance, fn):
     def _expand_annotation(instance, annotation, default=None):
@@ -51,7 +42,7 @@ def _resolve_instance_method_tensors(instance, fn):
             ", ".join(["?" if n is None else str(n) for n in tensor.shape.as_list()]),
         )
 
-    def _enrich_docs(doc_fields, tensor_dict):
+    def _enrich_docs_with_tensor_info(doc_fields, tensor_dict):
         existing = {k: v for k, _, v in doc_fields}
         return [
             (name, _tensor_info_str(tensor), existing.get(name, ''))
@@ -72,8 +63,8 @@ def _resolve_instance_method_tensors(instance, fn):
         doc = GoogleDocstring(obj=fn).result()
     else:
         doc = {'sections': [], 'args': {}, 'returns': {}}
-    doc['args'] = _enrich_docs(doc['args'], input_tensors)
-    doc['returns'] = _enrich_docs(doc['returns'], output_tensors)
+    doc['args'] = _enrich_docs_with_tensor_info(doc['args'], input_tensors)
+    doc['returns'] = _enrich_docs_with_tensor_info(doc['returns'], output_tensors)
 
     return doc, input_tensors, output_tensors
 
@@ -100,6 +91,8 @@ def _make_method(signature_def, result_class_name):
             tf.as_dtype(signature_def_input.dtype))
 
     def _impl(self, **kwargs):
+        print("_impl running")
+
         feed_dict = {}
         session = self.__tfi_session__
         with session.graph.as_default():
@@ -108,7 +101,9 @@ def _make_method(signature_def, result_class_name):
             for key in input_tensor_names_sorted:
                 input = signature_def.inputs[key]
                 value = kwargs[key]
+                print("finding session_handle_for", value, input)
                 sh = session_handle_for(value, input)
+                print("found session_handle_for", sh)
                 if sh is None:
                     feed_dict[input.name] = value
                 else:
@@ -118,15 +113,18 @@ def _make_method(signature_def, result_class_name):
             for key, fh in zip(handle_keys, session.run(handle_in)):
                 feed_dict[key] = fh
 
+            print("about to run!", output_tensor_names_sorted, feed_dict)
             result = session.run(
                 output_tensor_names_sorted,
                 feed_dict=feed_dict)
+            print("ran and got result!")
 
-        return result_class._make(result)
+        return dict(zip(output_tensor_keys_sorted, result))
 
     # Need to properly forge method parameters, complete with annotations.
-    argdef = ",".join(["_", *input_tensor_names_sorted])
-    argcall = ",".join(["_", *["%s=%s" % (k, k) for k in input_tensor_names_sorted]])
+    argnames = input_tensor_names_sorted
+    argdef = ",".join(["_", *argnames])
+    argcall = ",".join(["_", *["%s=%s" % (k, k) for k in argnames]])
     gensrc = """lambda %s: _impl(%s)""" % (argdef, argcall)
     impl = eval(gensrc, {'_impl': _impl})
     sigdef_inputs = signature_def.inputs
@@ -150,11 +148,32 @@ class Meta(type):
             # Wrap __init__ to graph, session, and methods.
             @functools.wraps(init)
             def wrapped_init(self, *a, **k):
+                if not hasattr(self, '__tfi_hyperparameters__'):
+                    hparam_docs = {}
+                    if hasattr(init, '__doc__') and init.__doc__:
+                        doc = GoogleDocstring(obj=init).result()
+                        for hparam_name, hparam_type, hparam_doc in doc['args']:
+                            hparam_docs[hparam_name] = hparam_doc
+
+                    ba = inspect.signature(init).bind(self, *a, **k)
+                    ba.apply_defaults()
+                    self.__tfi_hyperparameters__ = [
+                        (hparam_name, type(hparam_val), hparam_val, hparam_docs.get(hparam_name, []))
+                        for hparam_name, hparam_val in list(ba.arguments.items())[1:] # ignore self
+                    ]
+
                 self.__tfi_graph__ = tf.Graph()
-                self.__tfi_session__ = tf.Session(graph=self.__tfi_graph__)
+                config = tf.ConfigProto(
+                    device_count={'CPU' : 1, 'GPU' : 0},
+                    allow_soft_placement=True,
+                    log_device_placement=False,
+                    gpu_options={'allow_growth': True},
+                )
+                self.__tfi_session__ = tf.Session(graph=self.__tfi_graph__, config=config)
                 with self.__tfi_graph__.as_default():
                     with self.__tfi_session__.as_default():
                         init(self, *a, **k)
+
 
                 # Once init has executed, we can bind proper methods too!
                 if not hasattr(self, '__tfi_signature_defs__'):
@@ -186,6 +205,8 @@ class Meta(type):
                             types.MethodType(
                                     _make_method(sigdef, result_class_name),
                                     self))
+            if hasattr(init, '__doc__'):
+                wrapped_init.__doc__ = init.__doc__
             d['__init__'] = wrapped_init
 
         return super(Meta, meta).__new__(meta, classname, bases, d)

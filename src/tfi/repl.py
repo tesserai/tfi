@@ -9,12 +9,8 @@ from ptpython.repl import _lex_python_result
 
 from io import StringIO
 import tfi.data
-
-import tfi.data.pretty as _pretty
-
-
-def _ndarray_pprint(obj, p, cycle):
-    pass
+import tfi.format.iterm2
+import tfi.tensor.codec
 
 def _configure_repl(repl):
     class TfiPrompt(PromptStyle):
@@ -66,13 +62,14 @@ def _configure_repl(repl):
                     out_tokens = self.get_output_prompt_tokens(cli)
 
                     try:
-                        tensor = tfi.maybe_as_tensor(result, None, None)
-                        accept_mimetypes = {"image/png": tfi.data.terminal.imgcat, "text/plain": lambda x: x}
-                        result_val = tfi.data._encode(tensor, accept_mimetypes)
-                    except TypeError:
-                        result_val = result
-                    except Exception:
-                        result_val = result
+                        accept_mimetypes = {"image/png": tfi.format.iterm2.imgcat, "text/plain": lambda x: x}
+                        result = tfi.tensor.codec.encode(accept_mimetypes, result)
+                    # except TypeError:
+                    #     result_val = result
+                    # except Exception:
+                    #     result_val = result
+                    finally:
+                        pass
 
                     # output_s = StringIO()
                     # rprinter = _pretty.RepresentationPrinter(output_s)
@@ -80,16 +77,16 @@ def _configure_repl(repl):
                     # rprinter.pretty(result)
                     # result_str = output_s.getvalue()
 
-                    if result_val is None:
-                        result_val = result
+                    # if result_val is None:
+                    #     result_val = result
                     try:
-                        result_str = '%r\n' % (result_val, )
+                        result_str = '%r\n' % (result, )
                     except UnicodeDecodeError:
                         # In Python 2: `__repr__` should return a bytestring,
                         # so to put it in a unicode context could raise an
                         # exception that the 'ascii' codec can't decode certain
                         # characters. Decode as utf-8 in that case.
-                        result_str = '%s\n' % repr(result_val).decode('utf-8')
+                        result_str = '%s\n' % repr(result).decode('utf-8')
 
                     # Align every line to the first one.
                     line_sep = '\n' + ' ' * token_list_width(out_tokens)

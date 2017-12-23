@@ -1,8 +1,3 @@
-from tfi.as_tensor import *
-import tfi.checkpoint
-import tfi.data
-import tfi.saved_model
-import tfi.display
 
 __version__ = "0.5"
 

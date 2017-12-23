@@ -332,7 +332,7 @@ class Entry(collections.OrderedDict):
     Unicode strings.
     """
 
-    def __init__(self, fields, typ=None, key=None, pos=None, field_pos=None):
+    def __init__(self, fields=[], typ=None, key=None, pos=None, field_pos=None):
         super().__init__(fields)
         self.typ, self.key, self.pos, self.field_pos = typ, key, pos, field_pos
 

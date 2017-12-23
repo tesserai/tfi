@@ -205,35 +205,50 @@ class GitRepo(object):
 
 def git_authorship(github_user_db, path):
     git_repo, subpath = GitRepo.discover(path)
+    if git_repo is None:
+        return None
     commit = git_repo.commit()
-    remote_repo = git_repo.remote_repos_with_commit(commit)[0]
+    repos = git_repo.remote_repos_with_commit(commit)
+    if len(repos) == 0:
+        return None
+
+    remote_repo = repos[0]
 
     names_by_email, edits_by_email = git_repo.history_authorship(subpath)
     blame_by_email = git_repo.blame_authorship(subpath)
-    contributions = []
+    contributions = OrderedDict()
+
     for email, edits in edits_by_email.items():
         recent_commit_fn = partial(git_repo.commit_ancestor_with_author, email)
-        contributions.append({
-            'email': email,
-            'url': remote_repo.user_url(
-                    github_user_db,
-                    email,
-                    recent_commit_fn),
-            'name': names_by_email[email],
-            'commits_url': remote_repo.authorship_url(
-                    commit,
-                    subpath,
-                    github_user_db,
-                    email,
-                    recent_commit_fn),
-            'blames': blame_by_email.get(email, 0),
-            **{kind: edits[kind] for kind in _GIT_EDIT_KINDS}
-        })
-    contributions.sort(reverse=True, key=lambda c: (c['blames'], c['insertions'], c['files'], c['deletions']))
+        url = remote_repo.user_url(
+                github_user_db,
+                email,
+                recent_commit_fn)
+        if url in contributions:
+            contribution = contributions[url]
+            for kind in _GIT_EDIT_KINDS:
+                contribution[kind] += edits[kind]
+        else:
+            contributions[url] = {
+                'email': email,
+                'url': url,
+                'name': names_by_email[email],
+                'commits_url': remote_repo.authorship_url(
+                        commit,
+                        subpath,
+                        github_user_db,
+                        email,
+                        recent_commit_fn),
+                'blames': blame_by_email.get(email, 0),
+                **{kind: edits[kind] for kind in _GIT_EDIT_KINDS}
+            }
+
+    contribution_list = list(contributions.values())
+    contribution_list.sort(reverse=True, key=lambda c: (c['blames'], c['insertions'], c['files'], c['deletions']))
 
     return {
         "commit": commit,
         "url": remote_repo.tree_url(commit, subpath),
         "label": remote_repo.label(subpath),
-        "authors": contributions,
+        "authors": contribution_list,
     }

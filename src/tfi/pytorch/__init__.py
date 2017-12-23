@@ -12,26 +12,12 @@ import sys
 import types
 import warnings
 
-from tfi.as_tensor import as_tensor
-from tfi.doc.docstring import GoogleDocstring
+from tfi.base import _GetAttrAccumulator
+from tfi.parse.docstring import GoogleDocstring
+
+from tfi.pytorch.tensor_codec import as_tensor
 
 import torch
-
-class _GetAttrAccumulator:
-    def __init__(self, gotten=None):
-        if gotten is None:
-            gotten = []
-        self._gotten = gotten
-
-    def __getattr__(self, name):
-        return _GetAttrAccumulator([*self._gotten, name])
-
-    def __call__(self, target):
-        result = target
-        for name in self._gotten:
-            result = getattr(result, name)
-        return result
-
 
 def _resolve_instance_method_tensors(instance, fn):
     def _expand_annotation(instance, annotation, default=None):
@@ -62,8 +48,12 @@ def _resolve_instance_method_tensors(instance, fn):
     def _enrich_docs(doc_fields, tensor_dict):
         existing = {k: v for k, _, v in doc_fields}
         return [
-            (name, _tensor_info_str(tensor), existing.get(name, ''))
-            for name, tensor in tensor_dict.items()
+            (
+                name,
+                _tensor_info_str(tensor_dict[name]) if name in tensor_dict else '',
+                existing.get(name, '')
+            )
+            for name in set([*tensor_dict.keys(), *existing.keys()])
         ]
 
     sig = inspect.signature(fn)
@@ -152,8 +142,8 @@ class Meta(type):
 
                 # Remember which fields to pickle BEFORE we add methods.
                 if not hasattr(self, '__getstate__'):
-                    saved_fields = list(self.__dict__.keys())
-                    self.__getstate__ = lambda: {k: getattr(self, k) for k in saved_fields}
+                    self.__tfi_saved_fields__ = list(self.__dict__.keys())
+                    self.__getstate__ = lambda: {k: getattr(self, k) for k in self.__tfi_saved_fields__}
 
                 self.__tfi_init__()
             d['__init__'] = wrapped_init
@@ -197,76 +187,18 @@ class Base(object, metaclass=Meta):
 
         self.__tfi_init__()
 
-deserialized_objects = {}
-restore_location = torch.serialization.default_restore_location
-def _check_container_source(container_type, source_file, original_source):
-    current_source = inspect.getsource(container_type)
-    if original_source != current_source:
-        if container_type.dump_patches:
-            file_name = container_type.__name__ + '.patch'
-            diff = difflib.unified_diff(current_source.split('\n'),
-                                        original_source.split('\n'),
-                                        source_file,
-                                        source_file, lineterm="")
-            lines = '\n'.join(diff)
-            try:
-                with open(file_name, 'a+') as f:
-                    file_size = f.seek(0, 2)
-                    f.seek(0)
-                    if file_size == 0:
-                        f.write(lines)
-                    elif file_size != len(lines) or f.read() != lines:
-                        raise IOError
-                msg = ("Saved a reverse patch to " + file_name + ". "
-                       "Run `patch -p0 < " + file_name + "` to revert your "
-                       "changes.")
-            except IOError:
-                msg = ("Tried to save a patch, but couldn't create a "
-                       "writable file " + file_name + ". Make sure it "
-                       "doesn't exist and your working directory is "
-                       "writable.")
-        else:
-            msg = ("you can retrieve the original source code by "
-                   "accessing the object's source attribute or set "
-                   "`torch.nn.Module.dump_patches = True` and use the "
-                   "patch tool to revert the changes.")
-        msg = ("source code of class '{}' has changed. {}"
-               .format(torch.typename(container_type), msg))
-        warnings.warn(msg, SourceChangeWarning)
+from tfi.pytorch.load import persistent_load
+from tfi.pytorch import kosher as _kosher
+from tfi.doc import record_documentation
 
-def _persistent_load(saved_id):
-    assert isinstance(saved_id, tuple)
-    typename = saved_id[0]
-    data = saved_id[1:]
-
-    if typename == 'module':
-        # Ignore containers that don't have any sources saved
-        if all(data[1:]):
-            _check_container_source(*data)
-        return data[0]
-    elif typename == 'storage':
-        data_type, root_key, location, size, view_metadata = data
-        if root_key not in deserialized_objects:
-            deserialized_objects[root_key] = restore_location(
-                data_type(size), location)
-        storage = deserialized_objects[root_key]
-        if view_metadata is not None:
-            view_key, offset, view_size = view_metadata
-            if view_key not in deserialized_objects:
-                deserialized_objects[view_key] = storage[offset:offset + view_size]
-            return deserialized_objects[view_key]
-        else:
-            return storage
-    else:
-        raise RuntimeError("Unknown saved id type: %s" % saved_id[0])
-
-import tfi.kosher
 def export(export_path, model):
-    pickle_module = tfi.kosher.PickleModule(lambda m: m.startswith('zoo.'))
-    pickle_module.persistent_load = _persistent_load
+    record_documentation(model)
+    model.__tfi_saved_fields__.append('__tfi_documentation__')
+    pickle_module = _kosher.PickleModule(lambda m: m.startswith('zoo.'))
+    pickle_module.persistent_load = persistent_load
     with open(export_path, "w+b") as f:
         torch.save(model, f, pickle_module=pickle_module)
 
 def as_class(import_path):
     with open(import_path, "rb") as f:
-        return torch.load(f, pickle_module=tfi.kosher.PickleModule(lambda x: False))
+        return torch.load(f, pickle_module=_kosher.PickleModule(lambda x: False))

@@ -10,12 +10,35 @@ import importlib
 import inspect
 import os
 import sys
-import tensorflow as tf
+# import tensorflow as tf
 import tfi
+import tfi.pytorch
 
 
 from collections import OrderedDict
 from functools import partial
+
+def parse_python_str_constants(source):
+    constants = {}
+    parsed = ast.parse(source)
+    nv = ast.NodeVisitor()
+    nv.visit_Module = lambda n: nv.generic_visit(n)
+    def visit_Assign(n):
+        if len(n.targets) != 1:
+            return
+
+        target = n.targets[0]
+        if not isinstance(target, ast.Name):
+            return
+
+        if not isinstance(n.value, ast.Str):
+            return
+
+        constants[target.id] = n.value.s
+
+    nv.visit_Assign = visit_Assign
+    nv.visit(parsed)
+    return constants
 
 def resolve_method_and_needed(obj, method_spec):
     kwargs = {}
@@ -34,6 +57,18 @@ def resolve_method_and_needed(obj, method_spec):
     result = partial(method, **kwargs)
 
     return result, needed
+
+def argparser_for_fn(fn_name, needed_params, argparse_options_fn):
+    empty = inspect.Parameter.empty
+    parse = argparse.ArgumentParser(prog=fn_name)
+    for name, param in needed_params.items():
+        parse.add_argument(
+                '--%s' % name,
+                required=param.default is empty,
+                default=None if param.default is empty else param.default,
+                **argparse_options_fn(param))
+
+    return parse
 
 class ModelSpecifier(argparse.Action):
     def __init__(self,
@@ -56,25 +91,40 @@ class ModelSpecifier(argparse.Action):
         source = None
         via_python = False
         init = {}
-        if values.startswith('@'):
-            source = values[1:]
+        if values:
+            leading_value, *rest = values
+        else:
+            leading_value = None
+            rest = []
+
+        if leading_value is None:
+            source = ""
+            loaded = None
+        elif leading_value.startswith('@'):
+            source = leading_value[1:]
             loaded = tfi.pytorch.as_class(source)
-            # loaded = tfi.saved_model.as_class(values[1:])
-        elif values.startswith('http:') or values.startswith('https:'):
+            # loaded = tfi.saved_model.as_class(leading_value[1:])
+        elif leading_value.startswith('http:') or leading_value.startswith('https:'):
             # Load exported model via http(s)
-            source = values
+            source = leading_value
             loaded = tfi.pytorch.as_class(source)
-        elif '.py:' in values:
+        elif '.py:' in leading_value:
             import imp
-            pre_initargs, *rest = values.split("(", 1)
+            pre_initargs, *init_rest = leading_value.split("(", 1)
             source, classname = pre_initargs.split('.py:', 1)
             module_name = source.replace('/', '.')
             source = source + ".py"
+
+            with open(source) as f:
+                constants = parse_python_str_constants(f.read())
+                if '__tfi_conda_environment_yaml__' in constants:
+                    print("Found __tfi_conda_environment_yaml__.")
+
             module = imp.load_source(module_name, source)
             via_python = True
         else:
-            # Expecting values to be something like "module.class(kwargs)"
-            pre_initargs, *rest = values.split("(", 1)
+            # Expecting leading_value to be something like "module.class(kwargs)"
+            pre_initargs, *init_rest = leading_value.split("(", 1)
             *module_fragments, classname = pre_initargs.split(".")
             module_name = ".".join(module_fragments)
             module = importlib.import_module(module_name)
@@ -82,26 +132,37 @@ class ModelSpecifier(argparse.Action):
 
         if module is not None and classname is not None:
             loaded = getattr(module, classname)
-            if rest:
-                init = eval("dict(%s" % rest[0])
+            if init_rest:
+                init = eval("dict(%s" % init_rest[0])
 
         if callable(loaded):
             sig = inspect.signature(loaded)
-            needed = OrderedDict(sig.parameters.items())
+            needed_params = OrderedDict(sig.parameters.items())
             result = loaded
-            # Only allow unspecified values to be given.
+            # Only allow unspecified leading_value to be given.
             for k in init.keys():
-                del needed[k]
+                del needed_params[k]
             result = partial(loaded, **init)
         else:
             result = lambda: loaded
-            needed = OrderedDict()
+            needed_params = OrderedDict()
 
-        setattr(namespace, self.dest, result)
+        p = argparser_for_fn(
+                leading_value,
+                needed_params,
+                lambda param: {'type': type(param.default) if param.annotation is inspect.Parameter.empty else param.annotation})
+
+        p.add_argument('_rest', default=None, nargs=argparse.REMAINDER)
+        raw_args, rest_raw_args = split_list(rest, '--')
+        ns = p.parse_args(raw_args)
+        rest_raw_args = [*ns._rest, *rest_raw_args]
+        delattr(ns, '_rest')
+
+        setattr(namespace, self.dest, result(**vars(ns)))
         setattr(namespace, "%s_source" % self.dest, source)
         setattr(namespace, "%s_via_python" % self.dest, via_python)
-        setattr(namespace, "%s_raw" % self.dest, values)
-        setattr(namespace, "%s_kwargs" % self.dest, needed)
+        setattr(namespace, "%s_raw" % self.dest, leading_value)
+        setattr(namespace, "%s_rest" % self.dest, rest_raw_args)
 
 class _HelpAction(argparse.Action):
     def __init__(self,
@@ -130,8 +191,7 @@ parser.add_argument('--bind', type=str, default='127.0.0.1:5000', help='Set addr
 parser.add_argument('--export', type=str, help='path to export to')
 parser.add_argument('--export-doc', type=str, help='path to export doc to')
 parser.add_argument('--interactive', '-i', default=None, action='store_true', help='Start interactive session')
-parser.add_argument('specifier', type=str, default=None, nargs='?', action=ModelSpecifier, help='fully qualified class name to instantiate')
-parser.add_argument('method', type=str, nargs=argparse.REMAINDER, help='method to run')
+parser.add_argument('specifier', type=str, default=None, nargs=argparse.REMAINDER, action=ModelSpecifier, help='fully qualified class name to instantiate')
 # TODO(adamb) Fix help logic.
 parser.add_argument('--help', '-h', dest='help', default=None, action=_HelpAction, help="Show help")
 
@@ -156,11 +216,13 @@ def argparser_for_fn(fn_name, needed_params, argparse_options_fn):
                 required=param.default is empty,
                 default=None if param.default is empty else param.default,
                 **argparse_options_fn(param))
+
     return parse
 
-def apply_fn_args(fn_name, needed_params, param_types, fn, raw_args):
+def apply_fn_args(fn_name, needed_params, param_types, fn, raw_args, chain_method=False):
     p = argparser_for_fn(fn_name, needed_params, param_types)
-    kw = vars(p.parse_args(raw_args))
+    ns = p.parse_args(raw_args)
+    kw = vars(ns)
     return fn(**kw)
 
 def run(argns, remaining_args):
@@ -171,31 +233,26 @@ def run(argns, remaining_args):
     batch = False
 
     if argns.specifier:
-        hparam_raw_args, method_raw_args = split_list(remaining_args, '--')
-        method_raw_args = [*argns.method, *method_raw_args]
+        model = argns.specifier
 
-        model = apply_fn_args(
-                argns.specifier_raw,
-                argns.specifier_kwargs,
-                lambda param: {'type': type(param.default) if param.annotation is inspect.Parameter.empty else param.annotation},
-                argns.specifier,
-                hparam_raw_args)
-
-        if method_raw_args:
-            method_name, method_raw_args = method_raw_args[0], method_raw_args[1:]
+        if argns.specifier_rest:
+            method_name, method_raw_args = argns.specifier_rest[0], argns.specifier_rest[1:]
             method, needed = resolve_method_and_needed(model, method_name)
             result = apply_fn_args(
                     method_name,
                     needed,
                     lambda param: {
+                            # 'help': "%s %s" % (tf.as_dtype(param.annotation.dtype).name, tf.TensorShape(param.annotation.tensor_shape)),
                             'type': lambda o: param.annotation.get('dtype', lambda i: i)(tfi.data.file(o[1:]) if o.startswith("@") else o),
                         },
                     method,
-                    method_raw_args)
+                    method_raw_args,
+                    False)
 
             tensor = tfi.maybe_as_tensor(result, None, None)
-            accept_mimetypes = {"image/png": tfi.data.terminal.imgcat, "text/plain": lambda x: x}
+            accept_mimetypes = {"image/png": tfi.format.iterm2.imgcat, "text/plain": lambda x: x}
             result_val = None
+            # result_val = tfi.data._encode(tensor, accept_mimetypes)
             if result_val is None:
                 result_val = result
             result_str = '%r\n' % (result_val, )
@@ -205,22 +262,26 @@ def run(argns, remaining_args):
     if serving:
         host, port = argns.bind.split(':')
         port = int(port)
-        try:
+        running = False
+        # try:
+        #     if model is None:
+        #         from tfi.serve.gunicorn import run_deferred as gunicorn_run_deferred
+        #         running = True
+        #         gunicorn_run_deferred(host=host, port=port)
+        #     else:
+        #         from tfi.serve.gunicorn import run as gunicorn_run
+        #         running = True
+        #         gunicorn_run(model, host=host, port=port)
+        # except ModuleNotFoundError:
+        #     pass
+
+        if not running:
             if model is None:
-                from tfi.http.gunicorn import run_deferred as gunicorn_run_deferred
-                gunicorn_run_deferred(host=host, port=port)
-            else:
-                from tfi.http.gunicorn import run as gunicorn_run
-                gunicorn_run(model, host=host, port=port)
-        except ModuleNotFoundError:
-            if model is None:
-                from tfi.http.flask import run_deferred as flask_run_deferred
+                from tfi.serve.flask import run_deferred as flask_run_deferred
                 flask_run_deferred(host=host, port=port)
             else:
-                from tfi.http.flask import run as flask_run
+                from tfi.serve.flask import run as flask_run
                 flask_run(model, host=host, port=port)
-        finally:
-            pass
 
     if argns.interactive is None:
         argns.interactive = not batch and not exporting and not serving and not publishing
@@ -238,6 +299,7 @@ def run(argns, remaining_args):
 
     if argns.export:
         tfi.pytorch.export(argns.export, model)
+        # tfi.saved_model.export(argns.export, model)
 
     if argns.publish:
         import uuid

@@ -25,10 +25,11 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import os
-from base64 import b64encode
 import sys
 
-class escaped(object):
+from base64 import b64encode
+
+class _escaped(object):
     def __init__(self, s):
         self.s = s
     def __repr__(self):
@@ -73,4 +74,4 @@ def imgcat(data, width='auto', height='auto', preserveAspectRatio=False, inline=
     buf += b'\a'
     if is_tmux: buf += b'\033\\'
 
-    return escaped(buf.decode())
+    return _escaped(buf.decode())
