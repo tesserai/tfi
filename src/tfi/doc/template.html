@@ -25,7 +25,7 @@
     <meta content="IE=edge" http-equiv="X-UA-Compatible">
     <meta charset="utf-8">
     <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no" name="viewport">
-
+    {{extra_scripts}}
     <link rel="stylesheet" href="../design/fonts/whitney.css">
 
     <style>
@@ -70,6 +70,17 @@
 
     </header>
     <div id="content">
+    <div id="language">
+      <ul class="language-toggle">
+        <li>
+          <input type="radio" class="language-toggle-source" name="language-toggle" id="toggle-lang-curl" data-language="curl">
+          <label for="toggle-lang-curl" class="language-toggle-button language-toggle-button--curl">curl</label>
+        </li><li>
+          <input type="radio" class="language-toggle-source" name="language-toggle" id="toggle-lang-python" data-language="python" checked="checked">
+          <label for="toggle-lang-python" class="language-toggle-button language-toggle-button--python">Python</label>
+        </li>
+      </ul>
+    </div>
     <div id="head">
       {% if source %}
       <div class="source-code-ref">
@@ -104,7 +115,7 @@
             </div>
             <div class="method-example">
               <div class="method-example-part">
-                <div class="method-example-installation">
+                <div class="method-example-installation method-example-code method-example-code-python">
                   {{highlight_shell_source(["pip install tfi", "tfi http://localhost:5000"] | join("\n"))}}
                 </div>
               </div>
@@ -129,8 +140,11 @@
             </div>
             <div class="method-example">
               <div class="method-example-part">
-                <div class="method-example-use">
-                  {{highlight_python_source((method['example usage'] or []) | join("\n"), {'COLUMN_LIMIT': 50})}}
+                  <div class="method-example-use method-example-code method-example-code-curl">
+                      {{highlight_shell_source(curl_source_for(method))}}
+                  </div>
+                  <div class="method-example-use method-example-code method-example-code-python">
+                  {{highlight_python_source(python_source_for(method), {'COLUMN_LIMIT': 50})}}
                 </div>
               </div>
             </div>
@@ -320,6 +334,26 @@
           }
         });
       })();
+    </script>
+    <script>
+    (function() {
+      "use strict";
+      var changed = function() {
+          var className = `method-example-code-${this.dataset["language"]}`;
+          document.querySelectorAll('.method-example-code').forEach(function (elt) {
+            elt.style.display = elt.classList.contains(className) ? 'block' : 'none';
+          });
+      };
+
+      document.querySelectorAll("input.language-toggle-source").forEach(function(e) {
+        console.log(e);
+        e.addEventListener("change", changed);
+      });
+      var checked = document.querySelector("input.language-toggle-source[checked='checked']");
+      if (checked) {
+        changed.bind(checked)();
+      }
+    })();
     </script>
     <script>
     (function() {

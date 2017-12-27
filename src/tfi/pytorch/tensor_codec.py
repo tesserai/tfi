@@ -144,6 +144,7 @@ maybe_as_tensor = _as_tensor_adapter.maybe_as_tensor
 
 import numpy as np
 import torch
+import torch.autograd
 from torchvision import transforms
 
 from io import BytesIO
@@ -153,9 +154,20 @@ from tfi.tensor.codec import register_encoder as _register_encoder
 from tfi.tensor.codec import register_tensor_spec as _register_tensor_spec
 
 @_register_tensor_spec(_FileSource)
-def _tensor_spec(fp):
+def _file_source_tensor_spec(fp):
     tensor = as_tensor(fp, None, None)
     return tensor, tensor.shape, type(tensor), np.reshape
+
+@_register_tensor_spec(torch.autograd.variable.Variable)
+def _variable_tensor_spec(v):
+    return v.data, v.data.shape, type(v.data), np.reshape
+
+@_register_encoder(
+        ["python/jsonable"],
+        [torch.FloatTensor, torch.IntTensor, torch.ShortTensor],
+        [None])
+def _jsonable_encode(tensor):
+    return tensor.tolist()
 
 @_register_encoder(
         ["image/png"],

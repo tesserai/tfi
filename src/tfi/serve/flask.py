@@ -12,6 +12,14 @@ from tfi import pytorch as tfi_pytorch
 
 import tfi.tensor.codec
 
+def _replace_ref(v):
+    if not isinstance(v, dict) or '$ref' not in v:
+        return v
+    ref = v['$ref']
+    if ref.startswith('http://') or ref.startswith('https://'):
+        return tfi_data.file(ref)
+    return v
+
 def _field(req, field, annotation):
     if field in req.files:
         file = req.files[field]
@@ -22,12 +30,14 @@ def _field(req, field, annotation):
         if isinstance(annotation, dict) and 'dtype' in annotation:
             v = annotation['dtype'](v)
         else:
-            v = json.loads(v)
+            v = tfi_data.json(v)
         return True, v
     return False, None
 
 def _default_if_empty(v, default):
     return v if v is not inspect.Parameter.empty else default
+
+from tfi.base import _recursive_transform
 
 import base64
 def _make_handler(model, method_name):
@@ -43,29 +53,23 @@ def _make_handler(model, method_name):
         print("args", d)
         result = method(**d)
 
-        # For PyTorch:
-        return jsonify(result)
-        print("result", result)
-
-        # For TensorFlow:
         accept_mimetypes = {
             # "image/png": lambda x: base64.b64encode(x),
             "image/png": lambda x: x,
-            "text/plain": lambda x: x
+            "text/plain": lambda x: x,
+            # Use python/jsonable so we to a recursive transform before jsonification.
+            "python/jsonable": lambda x: x,
         }
-        r = tfi.tensor.codec.encode(accept_mimetypes, result.images[0])
-        print("r", r)
+        r = _recursive_transform(result, lambda o: tfi.tensor.codec.encode(accept_mimetypes, o))
         if r is not None:
-            return r
+            result = r
 
-        # tfi.tensor.encode()
         return jsonify(result)
-        # return str(result)
     return fn
 
-from tfi.doc import render as render_documentation
+from tfi.doc import documentation, render
 
-def make_app(model):
+def make_app(model, extra_scripts=""):
     if model is None:
         raise Exception("No model given")
 
@@ -78,17 +82,19 @@ def make_app(model):
 
         fn = _make_handler(model, method_name)
         fn.__name__ = method_name
-        print("Registering", method_name)
+        print("Registering", "/%s" % method_name)
         app.route("/%s" % method_name, methods=["POST", "GET"])(fn)
 
     @app.route("/", methods=["GET"])
     def docs():
-        return render_documentation(model)
+        return render(**documentation(model),
+                      host=request.headers['HOST'],
+                      extra_scripts=extra_scripts)
 
     return app
 
 import os
-def make_deferred_app():
+def make_deferred_app(extra_scripts=""):
     app = Flask(__name__)
     _setup_logger(app, logging.DEBUG)
 
@@ -101,13 +107,6 @@ def make_deferred_app():
         model[0] = tfi_pytorch.as_class(codepath)
         return ""
 
-    @app.route('/v2/specialize', methods=['POST'])
-    def loadv2():
-        body = request.get_json()
-        filepath = body['filepath']
-        model[0] = tfi_pytorch.as_class(filepath)
-        return ""
-
     @app.route('/', methods=['GET', 'POST', 'PUT', 'HEAD', 'OPTIONS', 'DELETE'])
     def f():
         if model[0] == None:
@@ -117,19 +116,19 @@ def make_deferred_app():
             # abort(500)
 
         print("---HEADERS---\n%s\n" % (request.headers))
-        if request.headers['Host'].startswith(request.headers['X-Fission-Function-Name'] + "."):
-            return render_documentation(model[0])
+        if 'X-Fission-Params-Method' not in request.headers:
+            return render(**documentation(model[0]), extra_scripts=extra_scripts)
 
-        method_name = request.headers.get('X-Fission-Params-method', request.headers['X-Fission-Function-Name'])
+        method_name = request.headers.get('X-Fission-Params-Method', request.headers['X-Fission-Function-Name'])
         return _make_handler(model[0], method_name)()
     return app
 
-def run_deferred(host, port):
-    app = make_deferred_app()
+def run_deferred(host, port, **kw):
+    app = make_deferred_app(**kw)
     app.run(host=host, port=port)
 
-def run(model, host, port):
-    app = make_app(model)
+def run(model, host, port, **kw):
+    app = make_app(model, **kw)
     app.run(host=host, port=port)
 
 #

@@ -1,7 +1,11 @@
 Dockerfile
+design/
 dist/
 scratch/
 tests/
 tf_python_env/
 venv/
 zoo/
+zoo2/
+zoo3/
+*.tfi

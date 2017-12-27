@@ -193,7 +193,6 @@ from tfi.doc import record_documentation
 
 def export(export_path, model):
     record_documentation(model)
-    model.__tfi_saved_fields__.append('__tfi_documentation__')
     pickle_module = _kosher.PickleModule(lambda m: m.startswith('zoo.'))
     pickle_module.persistent_load = persistent_load
     with open(export_path, "w+b") as f:

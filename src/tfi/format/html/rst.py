@@ -457,7 +457,6 @@ class _HTMLTranslator(nodes.NodeVisitor):
             self.in_footnote_list = False
 
     def visit_citation_reference(self, node):
-        print("node", dir(node), node)
         refname = node['refname']
         hover_id = "ref-" + refname.replace(".", "-")
         citation_label = self.document.settings.citation_label_by_refname[refname]
@@ -1619,7 +1618,6 @@ def parse_rst(source, source_path, bibtex_entries_by_refname):
     document = new_document(source_path, settings)
     parser = Parser()
     parser.parse(source, document)
-    print("document", document)
     visitor = _HTMLTranslator(document)
 
     document.transformer.add_transforms([

@@ -28,7 +28,6 @@ class ArxivBibtexRepo(object):
         for arxiv_id in arxiv_ids:
             found = self._db.search(Arxiv.arxiv_id == arxiv_id)
             if len(found) > 0:
-                print("resolved %d %s -> %s" % (ix, arxiv_id, found[0]))
                 results.append(found[0]['bibtex'])
             else:
                 results.append(None)
@@ -39,7 +38,6 @@ class ArxivBibtexRepo(object):
             resolved = self._resolver([id for id, ix in needed])
             for reference, (id, ix) in zip(resolved, needed):
                 bibtex = reference.bibtex()
-                print("resolved %d %s -> %s" % (ix, id, bibtex))
                 self._db.insert(OrderedDict([('arxiv_id', id), ('bibtex', bibtex)]))
                 results[ix] = bibtex
             self._flush()

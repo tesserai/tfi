@@ -11,6 +11,9 @@ from tfi.format.html.rst import parse_rst as _parse_rst
 from yapf.yapflib.yapf_api import FormatCode
 from yapf.yapflib.style import CreateGoogleStyle
 
+import json
+import shlex
+
 _page_template_path = __file__[:-2] + "html"
 if _page_template_path.endswith("__init__.html"):
     _page_template_path = _page_template_path.replace("__init__.html", __name__.split('.')[-1] + '.html')
@@ -28,12 +31,6 @@ def _read_style_fragment():
 # ['default', 'emacs', 'friendly', 'colorful', 'autumn', 'murphy', 'manni', 'monokai', 'perldoc', 'pastie', 'borland', 'trac', 'native', 'fruity', 'bw',
 # 'vim', 'vs', 'tango', 'rrt', 'xcode', 'igor', 'paraiso-light', 'paraiso-dark', 'lovelace', 'algol', 'algol_nu', 'arduino', 'rainbow_dash', 'abap']
 
-
-
-def write(path, **kwargs):
-    with open(path, "w") as f:
-        f.write(render(**kwargs))
-
 def render(
         source,
         authors,
@@ -42,7 +39,9 @@ def render(
         methods,
         hyperparameters,
         implementation_notes,
-        references):
+        references,
+        host="localhost:5000",
+        extra_scripts=""):
 
     with open(_page_template_path, encoding='utf-8') as f:
         t = JinjaTemplate(f.read())
@@ -59,12 +58,36 @@ def render(
         ]
         return " ".join(parts)
 
+    def python_source_for(method):
+        return "m.%s(%s)" % (method['name'], ", ".join(
+            [
+                "%s=%r" % (k, v)
+                for k, v in method['example args'].items()
+            ]
+        ))
+    
+    def curl_source_for(method):
+        def quoted_json_dumps(v):
+            s = json.dumps(v, default=lambda o: o.__json__() if hasattr(o, '__json__') else o)
+            return shlex.quote(s)
+
+        return "curl %s" % " \\\n     ".join([
+            "--request POST",
+            "--url http://%s/%s" % (host, method['name']),
+            *[
+                "--form %s=%s" % (k, quoted_json_dumps(v))
+                for k, v in method['example args'].items()
+            ],
+        ])
+
     def highlight_shell_source(s):
         return highlight(s,
                   BashLexer(),
                   HtmlFormatter(cssclass='language-python'))
 
     def highlight_python_source(s, more_style_config={}):
+        return highlight_shell_source(s)
+
         style_config = CreateGoogleStyle()
         style_config.update(more_style_config)
         s, _ = FormatCode(s, style_config=style_config)
@@ -84,9 +107,12 @@ def render(
     parsed = _parse_rst(overview, "<string>", references)
 
     return t.render(
+            python_source_for=python_source_for,
+            curl_source_for=curl_source_for,
             highlight_shell_source=highlight_shell_source,
             highlight_python_value=highlight_python_value,
             highlight_python_source=highlight_python_source,
+            extra_scripts=extra_scripts,
             shorten_author_name=shorten_author_name,
             style_fragment=_read_style_fragment(),
             title=parsed['title'],
@@ -98,4 +124,5 @@ def render(
             implementation_notes=implementation_notes,
             hover_divs=parsed['hover_divs'],
             references=references,
+            host=host,
             methods=methods)

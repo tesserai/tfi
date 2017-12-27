@@ -104,10 +104,19 @@ class ModelSpecifier(argparse.Action):
             source = leading_value[1:]
             loaded = tfi.pytorch.as_class(source)
             # loaded = tfi.saved_model.as_class(leading_value[1:])
-        elif leading_value.startswith('http:') or leading_value.startswith('https:'):
+        elif leading_value.startswith('http://') or leading_value.startswith('https://'):
             # Load exported model via http(s)
-            source = leading_value
-            loaded = tfi.pytorch.as_class(source)
+            import imp
+            import urllib.request
+            pre_initargs, *init_rest = leading_value.split("(", 1)
+            source, classname = pre_initargs.split('.py:', 1)
+            domain, *uri_path = source.split('://', 1)[1].split('/')
+            module_name = ".".join([*reversed(domain.split('.')), *uri_path])
+            source = source + ".py"
+
+            with urllib.request.urlopen(source) as f:
+                module = imp.load_source(module_name, source, f)
+                via_python = True
         elif '.py:' in leading_value:
             import imp
             pre_initargs, *init_rest = leading_value.split("(", 1)

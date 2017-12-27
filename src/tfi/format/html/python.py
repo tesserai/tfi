@@ -1,6 +1,7 @@
 import re
 import base64
 
+from tfi.base import _recursive_transform
 from tfi.format.pretty import pretty
 from tfi.tensor.codec import encode
 
@@ -16,20 +17,6 @@ def img_png_html(d):
 def text_plain(d):
     print("text_plain", d)
     return d
-
-def _recursive_transform(o, fn):
-    if isinstance(o, dict):
-        return {
-            k: _recursive_transform(v, fn)
-            for k, v in o.items()
-        }
-    elif isinstance(o, list):
-        return [
-            _recursive_transform(e, fn)
-            for e in o
-        ]
-    else:
-        return fn(o)
 
 def inspect(o, max_width=None, max_seq_length=None):
     # TODO(adamb) Need to do the right thing here...
@@ -50,7 +37,6 @@ def inspect(o, max_width=None, max_seq_length=None):
 
     def genpng(v):
         return genreplacement(img_png_html(v))
-
 
     accept_mimetypes = {"image/png": genpng, "text/plain": text_plain}
 

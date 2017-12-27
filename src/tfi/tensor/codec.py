@@ -156,7 +156,7 @@ def _from_tensor(tensor, shape_dims, dtype, reshape_fn, mappings):
         return xform(tensor)
 
     # Partial match, but still best possible.
-    needs_ndims = len(needs_shape_dims)
+    needs_ndims = len(needs_shape_dims) if needs_shape_dims is not None else 0
     matching_dims = shape_dims[-needs_ndims:]
     remaining_dims = shape_dims[:-needs_ndims]
     if len(remaining_dims) == 0:
