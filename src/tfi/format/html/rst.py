@@ -459,7 +459,7 @@ class _HTMLTranslator(nodes.NodeVisitor):
     def visit_citation_reference(self, node):
         refname = node['refname']
         hover_id = "ref-" + refname.replace(".", "-")
-        citation_label = self.document.settings.citation_label_by_refname[refname]
+        citation_label = self.document.settings.citation_label_by_refname(refname)
         node['hover-id'] = hover_id
         self.body.append(
                 self.starttag(
@@ -482,12 +482,10 @@ class _HTMLTranslator(nodes.NodeVisitor):
     def depart_citation_reference(self, node):
         refname = node['refname']
 
-        ent = self.document.settings.bibtex_entries_by_refname[refname]
+        ent = self.document.settings.bibtex_entries_by_refname(refname)
         self.body.append(']</span></span></dt-cite>')
         self.hover_divs.extend([
-            '<div style="display:none;" class="dt-hover-box" id="',
-            node['hover-id'],
-            '">',
+            '<div style="display:none;" class="dt-hover-box" id="%s">' % node['hover-id'],
             citation_hover_html(ent),
             '</div>',
         ])
@@ -639,10 +637,6 @@ class _HTMLTranslator(nodes.NodeVisitor):
         pass
 
     def depart_document(self, node):
-        if self.hover_divs:
-            self.hover_divs.insert(0, '<div id="cite-hover-boxes-container">')
-            self.hover_divs.append('</div>')
-
         if self.math_header:
             if self.math_output == 'mathjax':
                 self.head.extend(self.math_header)
@@ -1593,7 +1587,7 @@ class SimpleListChecker(nodes.GenericNodeVisitor):
 
 class _AddCitationNumbers(Transform):
     """
-    Remove system messages below verbosity threshold.
+    Replace citation text with increasing indices
     """
 
     default_priority = 870
@@ -1601,19 +1595,13 @@ class _AddCitationNumbers(Transform):
     def apply(self):
         citation_label_by_refname = self.document.settings.citation_label_by_refname
         for citation_refname, citation_refs in self.document.citation_refs.items():
-            citation_id_str = citation_label_by_refname[citation_refname]
+            citation_id_str = citation_label_by_refname(citation_refname)
             for citation_ref in citation_refs:
                 old = citation_ref.children[0]
                 new = nodes.Text(citation_id_str, citation_id_str)
                 citation_ref.replace(old, new)
 
-def parse_rst(source, source_path, bibtex_entries_by_refname):
-    citation_id = 0
-    citation_label_by_refname = {}
-    for citation_refname in bibtex_entries_by_refname:
-        citation_id += 1
-        citation_label_by_refname[citation_refname] = str(citation_id)
-
+def parse_rst(source, source_path, citation_label_by_refname, bibtex_entries_by_refname):
     settings = _DocutilsSettings(citation_label_by_refname, bibtex_entries_by_refname)
     document = new_document(source_path, settings)
     parser = Parser()
@@ -1635,5 +1623,5 @@ def parse_rst(source, source_path, bibtex_entries_by_refname):
         'title': "\n".join(visitor.title),
         'subtitle': "\n".join(visitor.subtitle),
         'body': "".join(visitor.body),
-        "hover_divs": "".join(visitor.hover_divs),
+        "hover_divs": visitor.hover_divs,
     }

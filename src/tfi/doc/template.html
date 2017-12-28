@@ -1,21 +1,28 @@
 {% macro render_args(klass, args) -%}
-  <div class="method-copy">
-    <div class="method-copy-padding">
-      <div class="method-list {{klass}}">
-        <h4 class="method-list-title"></h4>
-        <ul class="method-list-group">
-          {% for name, kind, description in args %}
-          <li class="method-list-item">
-            <h5 class="method-list-item-label">
-              {{name}}
-              <span class="method-list-item-label-details">{{kind.replace("<", "&lt;").replace(">", "&gt;")}}</span>
-            </h5>
-            <p class="method-list-item-description">{{description|join("\n")}}</p>
-          </li>
-          {% endfor %}
-        </ul>
-      </div>
+  <div class="method-copy-padding">
+    <div class="method-list {{klass}}">
+      <h4 class="method-list-title"></h4>
+      <ul class="method-list-group">
+        {% for name, kind, description in args %}
+        <li class="method-list-item">
+          <h5 class="method-list-item-label">
+            {{name}}
+            <span class="method-list-item-label-details">{{kind.replace("<", "&lt;").replace(">", "&gt;")}}</span>
+          </h5>
+          <p class="method-list-item-description">{{description|join("\n")}}</p>
+        </li>
+        {% endfor %}
+      </ul>
     </div>
+  </div>
+{%- endmacro %}
+
+{% macro language_tabs() -%}
+  <div class="tabs tabs-code">
+    <nav class="nav-languages">
+      <a data-language="curl" class="selected">curl</a>
+      <a data-language="python" class="">Python</a>
+    </nav>
   </div>
 {%- endmacro %}
 
@@ -27,10 +34,16 @@
     <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no" name="viewport">
     {{extra_scripts}}
     <link rel="stylesheet" href="../design/fonts/whitney.css">
+    <meta property="og:title" content="{{title}}" />
+    <meta property="og:description" content="{{subhead}}" />
+    <!-- <meta property="og:image" content="http://example.com/foo.png" /> -->
+    <!-- <meta property="og:site_name" content="Tesserai"/> -->
+    <!-- <meta property="og:url" content="http://example.com/canonical-url" /> -->
 
     <style>
     {{style_fragment}}
     </style>
+    <link rel="stylesheet" href="/template.css" />
   </head>
 
   <body id="documentation" class="">
@@ -70,17 +83,6 @@
 
     </header>
     <div id="content">
-    <div id="language">
-      <ul class="language-toggle">
-        <li>
-          <input type="radio" class="language-toggle-source" name="language-toggle" id="toggle-lang-curl" data-language="curl">
-          <label for="toggle-lang-curl" class="language-toggle-button language-toggle-button--curl">curl</label>
-        </li><li>
-          <input type="radio" class="language-toggle-source" name="language-toggle" id="toggle-lang-python" data-language="python" checked="checked">
-          <label for="toggle-lang-python" class="language-toggle-button language-toggle-button--python">Python</label>
-        </li>
-      </ul>
-    </div>
     <div id="head">
       {% if source %}
       <div class="source-code-ref">
@@ -109,8 +111,7 @@
               <h1>Overview</h1>
               <div class="method-copy-padding">
                 {{overview}}
-                <p><b>The examples <span class="side-bar-text-wide">in the right side bar</span><span class="side-bar-text-narrow">below</span> are designed to work as-is.</b> They only
-                                        assume you've installed TFI locally and have Python 3+. They will download any
+                <p><b>The examples below are designed to work as-is.</b> The curl examples all work without downloading or installing any software. The Python examples only assume you've installed TFI locally (using the directions above) and have Python 3+. They will download any
                                         additional required files automatically.</p>              </div>
             </div>
             <div class="method-example">
@@ -129,50 +130,42 @@
             <div class="method-copy">
               <div class="method-copy-padding">
                 <h1>{{method['name']}} method</h1>
-                {% for type, contents in method['sections'] %}
-                  {% if type == "text" %}
-                    <p>{{ contents | join("\n") | replace("\n\n", "</p><p>") }}</p>
-                  {% elif type == "example" %}
-                    {{contents | join("\n")}}
-                  {% endif %}
-                {% endfor %}
+                {{method['overview']}}
               </div>
             </div>
             <div class="method-example">
               <div class="method-example-part">
-                  <div class="method-example-use method-example-code method-example-code-curl">
-                      {{highlight_shell_source(curl_source_for(method))}}
-                  </div>
-                  <div class="method-example-use method-example-code method-example-code-python">
+                {{language_tabs()}}
+                <div class="method-example-use method-example-code method-example-code-curl">
+                  {{highlight_shell_source(curl_source_for(method))}}
+                </div>
+                <div class="method-example-use method-example-code method-example-code-python">
                   {{highlight_python_source(python_source_for(method), {'COLUMN_LIMIT': 50})}}
                 </div>
               </div>
-            </div>
-          </div>
-          {% if method['args'] | length > 0 %}
-          <div class="method-area">
-            {{render_args('inputs', method['args'])}}
-            <div class="method-example">
-              <div class="method-example-part">
-                <div class="method-example-input">
-                  {{highlight_python_value(method['example args'], 50, 8)}}
-                </div>
-              </div>
-            </div>
-          </div>
-          {% endif %}
-          {% if method['returns'] | length > 0 %}
-          <div class="method-area">
-            {{render_args('outputs', method['returns'])}}
-            <div class="method-example">
               <div class="method-example-part">
                 <div class="method-example-output">
                   {{highlight_python_value(method['example result'], 50, 8)}}
                 </div>
               </div>
             </div>
+            <div class="method-copy">
+              {% if method['args'] | length > 0 %}
+                {{render_args('inputs', method['args'])}}
+                <!-- <div class="method-example">
+                  <div class="method-example-part">
+                    <div class="method-example-input">
+                      {{highlight_python_value(method['example args'], 50, 8)}}
+                    </div>
+                  </div>
+                </div> -->
+              {% endif %}
+              {% if method['returns'] | length > 0 %}
+                {{render_args('outputs', method['returns'])}}
+              {% endif %}
+            </div>
+
           </div>
-          {% endif %}
         </section>
         {% endfor %}
 
@@ -230,7 +223,7 @@
     </div>
       {% endif %}
     </div>
-    {{hover_divs}}
+    <div id="cite-hover-boxes-container">{{hover_divs | join("\n")}}</div>
     <script>
     /*!
     Waypoints - 4.0.1
@@ -305,7 +298,6 @@
                   return;
                 }
                 window.history.replaceState({}, "", "#" + id);
-                console.log("hi");
                 updateNavSelection();
               },
               offset: 0
@@ -339,19 +331,29 @@
     (function() {
       "use strict";
       var changed = function() {
-          var className = `method-example-code-${this.dataset["language"]}`;
-          document.querySelectorAll('.method-example-code').forEach(function (elt) {
-            elt.style.display = elt.classList.contains(className) ? 'block' : 'none';
-          });
-      };
+        var lang = this.dataset["language"];
+        var className = `method-example-code-${lang}`;
 
-      document.querySelectorAll("input.language-toggle-source").forEach(function(e) {
+        document.querySelectorAll('.method-example-code').forEach(function (elt) {
+          elt.style.display = elt.classList.contains(className) ? 'block' : 'none';
+        });
+
+        document.querySelectorAll(".nav-languages a[data-language]").forEach(function(e) {
+          if (e.dataset["language"] === lang) {
+            e.classList.add("selected");
+          } else {
+            e.classList.remove("selected");
+          }
+        });
+      };
+      
+      document.querySelectorAll(".nav-languages a[data-language]").forEach(function(e) {
         console.log(e);
-        e.addEventListener("change", changed);
+        e.addEventListener("click", changed);
       });
-      var checked = document.querySelector("input.language-toggle-source[checked='checked']");
-      if (checked) {
-        changed.bind(checked)();
+      var selected = document.querySelector(".nav-languages a[data-language].selected");
+      if (selected) {
+        changed.bind(selected)();
       }
     })();
     </script>

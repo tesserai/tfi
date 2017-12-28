@@ -80,9 +80,9 @@ def documentation(model):
         model_doc = _GoogleDocstring(obj=model).result()
         model_doc_sections = model_doc['sections']
 
-        # TODO(adamb) Should we be parsing rst here? Probably not. We probably
-        # want to just emit valid (possibly rewritten) rst. Then we'll parse
-        # rst for real when rendering HTML.
+        # NOTE(adamb) Since we don't want to be parsing rst here, we'll just rewrite
+        #     it to include detected citations. Expect that this rst will be parsed
+        #     for real when rendering HTML.
         text_sections = [v for t, v in model_doc_sections if t == 'text']
         overview = _detect_paragraph_citations(
             _resolve_citation_id,
@@ -124,8 +124,14 @@ _ = dict(%s)
         except Exception as ex:
             print(ex)
 
+        method_text_sections = [v for t, v in method_doc['sections'] if t == 'text']
+        method_overview = _detect_paragraph_citations(
+            _resolve_citation_id,
+            "\n".join([l for t in method_text_sections for l in t]))
+
         return {
             "name": method_name,
+            "overview": method_overview,
             "sections": method_doc['sections'],
             "args": method_doc['args'],
             "returns": method_doc['returns'],

@@ -117,7 +117,10 @@ def make_deferred_app(extra_scripts=""):
 
         print("---HEADERS---\n%s\n" % (request.headers))
         if 'X-Fission-Params-Method' not in request.headers:
-            return render(**documentation(model[0]), extra_scripts=extra_scripts)
+            return render(
+                    **documentation(model[0]),
+                    host=request.headers.get('Host', "$HOST"),
+                    extra_scripts=extra_scripts)
 
         method_name = request.headers.get('X-Fission-Params-Method', request.headers['X-Fission-Function-Name'])
         return _make_handler(model[0], method_name)()

@@ -36,14 +36,24 @@ def _resolve_instance_method_tensors(instance, fn):
     def _tensor_info_str(tensor):
         shape_list = tensor['shape']
         ndims = len(shape_list)
-        dtype_name = tensor.get('dtype', None)
+        dtype = tensor.get('dtype', None)
+        if dtype is None:
+            dtype_name = 'any'
+        elif isinstance(dtype, type):
+            dtype_name = dtype.__name__
+        else:
+            dtype_name = str(dtype)
+
         if ndims is None:
             return "%s ?" % dtype_name
 
-        return "%s <%s>" % (
-            dtype_name,
-            ", ".join(["?" if n is None else str(n) for n in shape_list]),
-        )
+        if len(shape_list) == 0:
+            shape = "scalar"
+        else:
+            shape = "<%s>" % (
+                ", ".join(["?" if n is None else str(n) for n in shape_list]),
+            )
+        return "%s %s" % (dtype_name, shape)
 
     def _enrich_docs(doc_fields, tensor_dict):
         existing = {k: v for k, _, v in doc_fields}

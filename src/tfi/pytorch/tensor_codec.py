@@ -148,12 +148,12 @@ import torch.autograd
 from torchvision import transforms
 
 from io import BytesIO
-from tfi.data import _FileSource
+from tfi.data import _Source
 
 from tfi.tensor.codec import register_encoder as _register_encoder
 from tfi.tensor.codec import register_tensor_spec as _register_tensor_spec
 
-@_register_tensor_spec(_FileSource)
+@_register_tensor_spec(_Source)
 def _file_source_tensor_spec(fp):
     tensor = as_tensor(fp, None, None)
     return tensor, tensor.shape, type(tensor), np.reshape
