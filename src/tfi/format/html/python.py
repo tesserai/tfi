@@ -44,7 +44,6 @@ def inspect(o, max_width=None, max_seq_length=None):
     if val is not None:
         o = val
 
-    # return '%r' % val
     if max_width is None:
         max_width = 79
     if max_seq_length is None:
@@ -52,6 +51,5 @@ def inspect(o, max_width=None, max_seq_length=None):
     r = pretty(o, max_width=max_width, max_seq_length=max_seq_length)
     xform = replaceall
     return r, xform
-    # return '%r' % o
 
 inspect_html = inspect

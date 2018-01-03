@@ -210,29 +210,48 @@ class path(_Source):
     def __tensor__(self, ops, shape, dtype):
         return ops.decode_file_path(shape, dtype, self._resolve_mimetype(), self._resolve_path())
 
-# class stream(_Source):
-#     def __init__(self, _arg, _mimetype):
-#         """Returns a tensor-adaptable representation of the bytes at current position of the given stream"""
-#         self._stream = stream
-#         self._mimetype = _mimetype
+class stream(_Source):
+    def __init__(self, _arg, _mimetype):
+        """Returns a tensor-adaptable representation of the bytes at current position of the given stream"""
+        self._stream = _arg
+        self._mimetype = _mimetype
 
-#     def read(self):
-#         pos = None
-#         try:
-#             pos = d.tell()
-#             return d.read()
-#         finally:
-#             if pos is not None:
-#                 d.seek(pos)
+    def __repr__(self):
+        return "tfi.data.base64(%r%s)" % (self._as_base64(), "" if self._mimetype is None else ", mimetype=%s" % self._mimetype)
+
+    def read(self):
+        if not hasattr(self._stream, 'tell'):
+            print("no tell for", self._stream, "converting to BytesIO")
+            b = self._stream.read()
+            self._stream = _BytesIO(b)
+
+        pos = None
+        try:
+            pos = self._stream.tell()
+            return self._stream.read()
+        finally:
+            if pos is not None:
+                self._stream.seek(pos)
+
+    def _as_base64(self):
+        return _base64.b64encode(self.read())
     
-#     def __setstate__(self, d):
-#         pass
+    def __setstate__(self, d):
+        self._stream = _BytesIO(_base64.b64decode(d['$base64']))
+        self._mimetype = d.get('$mimetype', None)
 
-#     def __json__(self):
-#         pass
+    def __getstate__(self):
+        return self.__json__()
 
-#     def __tensor__(self, ops, shape, dtype):
-#         return ops.decode_open_file(shape, dtype, self._mimetype, self._stream)
+    def __json__(self):
+        r = {}
+        r['$base64'] = self.read()
+        if self._mimetype is not None:
+            r['$mimetype'] = self._mimetype
+        return r
+
+    def __tensor__(self, ops, shape, dtype):
+        return ops.decode_open_file(shape, dtype, self._mimetype, self._stream)
 
 def file(arg, mimetype=None):
     if isinstance(arg, str):

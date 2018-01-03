@@ -9,11 +9,11 @@ import ast
 import importlib
 import inspect
 import os
+import os.path
 import sys
 # import tensorflow as tf
 import tfi
 import tfi.pytorch
-
 
 from collections import OrderedDict
 from functools import partial
@@ -101,28 +101,72 @@ class ModelSpecifier(argparse.Action):
             source = ""
             loaded = None
         elif leading_value.startswith('@'):
-            source = leading_value[1:]
+            source = os.path.abspath(leading_value[1:])
             loaded = tfi.pytorch.as_class(source)
             # loaded = tfi.saved_model.as_class(leading_value[1:])
         elif leading_value.startswith('http://') or leading_value.startswith('https://'):
             # Load exported model via http(s)
-            import imp
-            import urllib.request
             pre_initargs, *init_rest = leading_value.split("(", 1)
-            source, classname = pre_initargs.split('.py:', 1)
-            domain, *uri_path = source.split('://', 1)[1].split('/')
-            module_name = ".".join([*reversed(domain.split('.')), *uri_path])
-            source = source + ".py"
 
-            with urllib.request.urlopen(source) as f:
-                module = imp.load_source(module_name, source, f)
-                via_python = True
+            if '.py:' in pre_initargs or pre_initargs.endswith('.py'):
+                import imp
+                import urllib.request
+                source, classname = pre_initargs.split('.py:', 1)
+                domain, *uri_path = source.split('://', 1)[1].split('/')
+                module_name = ".".join([*reversed(domain.split('.')), *uri_path])
+                source = source + ".py"
+
+                with urllib.request.urlopen(source) as f:
+                    module = imp.load_source(module_name, source, f)
+                    via_python = True
+            else:
+                source = pre_initargs
+
+                # Assume URL is to documentation.
+                from bs4 import BeautifulSoup
+                import tempfile
+                import urllib.request
+                import requests
+                from tqdm import tqdm
+
+                found = False
+                with urllib.request.urlopen(source) as f:
+                    doc = BeautifulSoup(f, 'html5lib')
+                    matching = doc.html.head.findAll('meta', {"name":'tesserai:snapshot'})
+                    for match in matching:
+                        if match.has_attr('content'):
+                            source = urllib.parse.urljoin(source, match['content'])
+                            found = True
+                            break
+
+                if not found:
+                    raise Exception("Couldn't find tesserai:snapshot in meta in %s" % doc)
+
+                with tempfile.NamedTemporaryFile(mode='wb', delete=False) as f:
+                    print("will download from", source, "to", f.name)
+
+                    with requests.get(source, stream=True) as r:
+                        progress = tqdm(
+                                total=int(r.headers["Content-Length"]),
+                                desc="Downloading",
+                                unit="B",
+                                unit_scale=True,
+                                unit_divisor=1024,
+                                leave=True)
+                        for chunk in r.iter_content(chunk_size=65536):
+                            if chunk:
+                                f.write(chunk)
+                                progress.update(len(chunk))
+
+                        source = f.name
+                        loaded = tfi.pytorch.as_class(f.name)
+
         elif '.py:' in leading_value:
             import imp
             pre_initargs, *init_rest = leading_value.split("(", 1)
             source, classname = pre_initargs.split('.py:', 1)
             module_name = source.replace('/', '.')
-            source = source + ".py"
+            source = os.path.abspath(source + ".py")
 
             with open(source) as f:
                 constants = parse_python_str_constants(f.read())
@@ -269,6 +313,15 @@ def run(argns, remaining_args):
             batch = True
 
     if serving:
+        segment_js = """
+<script>
+  !function(){var analytics=window.analytics=window.analytics||[];if(!analytics.initialize)if(analytics.invoked)window.console&&console.error&&console.error("Segment snippet included twice.");else{analytics.invoked=!0;analytics.methods=["trackSubmit","trackClick","trackLink","trackForm","pageview","identify","reset","group","track","ready","alias","debug","page","once","off","on"];analytics.factory=function(t){return function(){var e=Array.prototype.slice.call(arguments);e.unshift(t);analytics.push(e);return analytics}};for(var t=0;t<analytics.methods.length;t++){var e=analytics.methods[t];analytics[e]=analytics.factory(e)}analytics.load=function(t){var e=document.createElement("script");e.type="text/javascript";e.async=!0;e.src=("https:"===document.location.protocol?"https://":"http://")+"cdn.segment.com/analytics.js/v1/"+t+"/analytics.min.js";var n=document.getElementsByTagName("script")[0];n.parentNode.insertBefore(e,n)};analytics.SNIPPET_VERSION="4.0.0";
+  analytics.load("GaappI2dkNZV4PLVdiJ8pHQ7Hofbf6Vz");
+  analytics.page();
+  }}();
+</script>
+        """
+
         host, port = argns.bind.split(':')
         port = int(port)
         running = False
@@ -276,21 +329,30 @@ def run(argns, remaining_args):
         #     if model is None:
         #         from tfi.serve.gunicorn import run_deferred as gunicorn_run_deferred
         #         running = True
-        #         gunicorn_run_deferred(host=host, port=port)
+        #         gunicorn_run_deferred(host=host, port=port, extra_scripts=segment_js)
         #     else:
         #         from tfi.serve.gunicorn import run as gunicorn_run
         #         running = True
-        #         gunicorn_run(model, host=host, port=port)
+        #         gunicorn_run(model, host=host, port=port, extra_scripts=segment_js)
         # except ModuleNotFoundError:
         #     pass
 
         if not running:
             if model is None:
                 from tfi.serve.flask import run_deferred as flask_run_deferred
-                flask_run_deferred(host=host, port=port)
+                flask_run_deferred(host=host, port=port, extra_scripts=segment_js)
             else:
                 from tfi.serve.flask import run as flask_run
-                flask_run(model, host=host, port=port)
+                def model_file_fn():
+                    if argns.specifier_source and not argns.specifier_via_python:
+                        return argns.specifier_source
+                    with tempfile.NamedTemporaryFile(mode='rb', delete=False) as f:
+                        print("Exporting ...", end='', flush=True)
+                        tfi.pytorch.export(f.name, model)
+                        print(" done", flush=True)
+                        return f.name
+
+                flask_run(model, host=host, port=port, model_file_fn=model_file_fn, extra_scripts=segment_js)
 
     if argns.interactive is None:
         argns.interactive = not batch and not exporting and not serving and not publishing
@@ -307,15 +369,24 @@ def run(argns, remaining_args):
         tfi.doc.save(argns.export_doc, model)
 
     if argns.export:
-        tfi.pytorch.export(argns.export, model)
+        if argns.specifier_source and not argns.specifier_via_python:
+            import shutil
+            shutil.copyfile(argns.specifier_source, argns.export)
+        else:
+            tfi.pytorch.export(argns.export, model)
         # tfi.saved_model.export(argns.export, model)
 
     if argns.publish:
-        import uuid
-        import tempfile
+        import decimal
         import hashlib
-        import requests
         import json
+        import requests
+        import tempfile
+        import uuid
+
+        from tqdm import tqdm
+        from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
+
 
         def sha256_for_file(f, buf_size=65536):
             pos = f.tell()
@@ -361,7 +432,6 @@ def run(argns, remaining_args):
                 raise Exception(response.text)
             return response.status_code, response.json()
 
-        import decimal
         def format_bytes(count):
             label_ix = 0
             labels = ["B", "KiB", "MiB", "GiB"]
@@ -381,10 +451,29 @@ def run(argns, remaining_args):
                 print("Already uploaded", flush=True)
                 return archive_sha256, response
 
-            print("Uploading %s..." % format_bytes(filesize), end='', flush=True)
+            progress = tqdm(
+                    total=filesize,
+                    desc="Uploading",
+                    unit="B",
+                    unit_scale=True,
+                    unit_divisor=1024,
+                    leave=True)
+
+            last_bytes_read = 0
+            def update_progress(monitor):
+                # Your callback function
+                nonlocal last_bytes_read
+                progress.update(monitor.bytes_read - last_bytes_read)
+                last_bytes_read = monitor.bytes_read
+
+            e = MultipartEncoder(fields={'uploadfile': ('uploaded', file, 'text/plain')})
+            m = MultipartEncoderMonitor(e, update_progress)
             archive_response = requests.post(base_archive_url,
-                    files={'uploadfile': file},
-                    headers={"X-File-Size": str(filesize)})
+                    data=m,
+                    headers={
+                        "X-File-Size": str(filesize),
+                        'Content-Type': m.content_type})
+
             archive_id = archive_response.json()['id']
             print(" done", flush=True)
 
@@ -443,7 +532,7 @@ def run(argns, remaining_args):
         def lazily_define_trigger2(function_name, http_method, host, relativeurl):
             trigger_name = "%s-%s-%s" % (
                     host.replace('.', '-'),
-                    relativeurl.replace('{', '').replace('}', '').replace('/', '-'),
+                    relativeurl.replace(':.*', '').replace('{', '').replace('}', '').replace('/', '-'),
                     http_method.lower())
             status_code, response = get("/v2/triggers/http/%s" % trigger_name)
             if status_code == 200:
@@ -471,8 +560,8 @@ def run(argns, remaining_args):
         def lazily_define_trigger(f):
             function_name = lazily_define_function(f)
             host = "%s.tfi.gcp.tesserai.com" % function_name
-            lazily_define_trigger2(function_name, "POST", host, "/{method}")
-            lazily_define_trigger2(function_name, "GET", host, "/{method}")
+            lazily_define_trigger2(function_name, "POST", host, "/{path-info:.*}")
+            lazily_define_trigger2(function_name, "GET", host, "/{path-info:.*}")
             lazily_define_trigger2(function_name, "GET", host, "/")
             return "http://%s" % host
 

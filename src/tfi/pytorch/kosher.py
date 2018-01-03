@@ -28,6 +28,10 @@ class KosherUnpickler(pickle.Unpickler):
         return r
 
     def find_class(self, module, name):
+        if module not in self.module_fields:
+            if isinstance(module, str) and module.startswith("tfi.doc.biblib."):
+                module = module.replace("tfi.doc.biblib.", "tfi.parse.biblib.")
+
         if module in self.module_fields:
             mod = self.module_fields[module]
             return mod.__dict__[name]

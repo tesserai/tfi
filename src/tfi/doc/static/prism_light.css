@@ -1,0 +1,255 @@
+pre .highlighted-line {
+    background: rgba(99,115,131,.08)
+}
+
+code .token {
+    padding: 0;
+    margin: 0
+}
+
+code .token:not(.script) {
+    font-weight: 400
+}
+
+code .token.property {
+    font-weight: 500
+}
+
+.language-php .token.operator,code .token.atrule,code .token.keyword {
+    color: #6772e5
+}
+
+code.language-markup .token.namespace,code .token.attr-name,code .token.selector,code .token.tag,code .token.tag * {
+    color: #0075d6
+}
+
+.language-php .token.operator,code .token.atrule,code .token.keyword,code .token.tag {
+    font-weight: 600
+}
+
+code .token.attr-name {
+    font-style: italic
+}
+
+code .token.comment {
+    font-weight: 400;
+    color: #91a2b0
+}
+
+code.language-url,code .token.function,code .token.url {
+    font-weight: 600;
+    color: #3297d3
+}
+
+.language-ruby .token.constant+.token.punctuation,.language-ruby .token.constant+.token.punctuation+.token.symbol,code .token.boolean,code .token.builtin,code .token.class-name,code .token.constant,code .token.namespace {
+    font-weight: 600;
+    color: #2191ef
+}
+
+code .token.number {
+    color: #fa755a
+}
+
+code .token.header {
+    font-weight: 700
+}
+
+.language-bash .token.function,code .token.curl,code .token.option,code .token.variable {
+    color: teal;
+    font-weight: 600
+}
+
+.language-bash .token.function,code .token.curl,code .token.option {
+    font-weight: 500
+}
+
+.language-bash .token.option,code.language-css .property,code .token.parameter,code .token.symbol {
+    font-weight: 500;
+    color: #d14
+}
+
+code.language-html .token.attr-value>.punctuation:not(:first-child),code.language-markup .token.attr-value>.punctuation:not(:first-child),code .token.attr-value,code .token.macro,code .token.string,code .token.stripe,code .token.value {
+    font-weight: 400;
+    color: #159570
+}
+
+code .token.macro .keyword {
+    color: #064508
+}
+
+code .token.publishable-key,code .token.secret-key {
+    background: #eceff1;
+    border-radius: 3px;
+    padding: 2px;
+    margin: -2px
+}
+
+code .token.publishable-key.enabled,code .token.secret-key.enabled {
+    background: #dfe3e6
+}
+
+pre {
+    position: relative;
+    color: #424770
+}
+
+/* pre .line-numbers {
+    position: absolute;
+    pointer-events: none;
+    top: 11px;
+    left: 29px;
+    width: 16px;
+    counter-reset: a;
+    line-height: 19px;
+    font-family: Source Code Pro,monospace
+}
+
+pre .line-numbers>span {
+    pointer-events: none;
+    display: block;
+    counter-increment: a
+}
+
+pre .line-numbers>span:before {
+    content: counter(a);
+    color: #bec5ca;
+    display: block;
+    font-size: 13px;
+    text-align: right;
+    user-select: none
+}
+
+pre .line-numbers>span.highlighted:before {
+    color: #858c90;
+    font-weight: 500
+}
+
+pre.language-bash .line-numbers>span:before,pre.language-curl .line-numbers>span:before {
+    content: '>'
+}
+
+pre.language-bash .line-numbers>span:first-child:before,pre.language-curl .line-numbers>span:first-child:before {
+    content: '$'
+} */
+
+pre.line-numbers {
+	position: relative;
+	padding-left: 3.8em;
+	counter-reset: linenumber;
+}
+
+pre.line-numbers > code {
+	position: relative;
+    white-space: inherit;
+}
+
+.line-numbers .line-numbers-rows {
+	position: absolute;
+	pointer-events: none;
+	top: 0;
+	font-size: 100%;
+	left: -3.8em;
+	width: 3em; /* works for line-numbers below 1000 lines */
+	letter-spacing: -1px;
+
+	-webkit-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
+
+}
+
+.line-numbers-rows {
+    margin-top: -0.1em;
+}
+.line-numbers-rows > span {
+	pointer-events: none;
+	display: block;
+	counter-increment: linenumber;
+}
+
+.language-bash .line-numbers-rows>span:before, .language-curl .line-numbers-rows>span:first-child:before {
+    content: '$';
+}
+
+.language-curl .line-numbers-rows>span:before {
+    content: '>';
+}
+
+.line-numbers-rows > span:before {
+	content: counter(linenumber);
+	color: #999;
+    display: block;
+	padding-right: 0.8em;
+	text-align: right;
+}
+
+
+.method-example:hover .clipboard-copy, .method-example .clipboard-copy:focus {
+    opacity: 1;
+}
+
+@media screen and (max-width: 48rem) {
+    .method-example .btn, .method-example .clipboard-copy {
+        opacity:1;
+    }
+}
+
+.clipboard-copy {
+    position: absolute;
+    top: 0;
+    left: -2em;
+    font-size: 1.3rem;
+
+    cursor: pointer;
+    -webkit-transition: opacity 0.3s ease-in-out;
+    -o-transition: opacity 0.3s ease-in-out;
+    transition: opacity 0.3s ease-in-out;
+    opacity: 0;
+}
+
+.clipboard-copy-icon {
+    padding: 7px 6px;
+
+    box-sizing: content-box;
+    border-radius: 4px;
+    width: 0.875em;
+    height: 1em;
+    box-sizing: content-box;
+    border: 1px solid #e5e5e5;
+}
+
+.clipboard-copy-icon:before {
+    content: ' ';
+    display: block;
+    margin-top: -1px;
+    margin-left: 1px;
+    width: 100%;
+    height: 100%;
+
+    background-color: #2da0e5;
+    -webkit-mask: url("data:image/svg+xml;base64,PHN2ZyBoZWlnaHQ9IjEwMjQiIHdpZHRoPSI4OTYiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CiAgPHBhdGggZD0iTTEyOCA3NjhoMjU2djY0SDEyOHYtNjR6IG0zMjAtMzg0SDEyOHY2NGgzMjB2LTY0eiBtMTI4IDE5MlY0NDhMMzg0IDY0MGwxOTIgMTkyVjcwNGgzMjBWNTc2SDU3NnogbS0yODgtNjRIMTI4djY0aDE2MHYtNjR6TTEyOCA3MDRoMTYwdi02NEgxMjh2NjR6IG01NzYgNjRoNjR2MTI4Yy0xIDE4LTcgMzMtMTkgNDVzLTI3IDE4LTQ1IDE5SDY0Yy0zNSAwLTY0LTI5LTY0LTY0VjE5MmMwLTM1IDI5LTY0IDY0LTY0aDE5MkMyNTYgNTcgMzEzIDAgMzg0IDBzMTI4IDU3IDEyOCAxMjhoMTkyYzM1IDAgNjQgMjkgNjQgNjR2MzIwaC02NFYzMjBINjR2NTc2aDY0MFY3Njh6TTEyOCAyNTZoNTEyYzAtMzUtMjktNjQtNjQtNjRoLTY0Yy0zNSAwLTY0LTI5LTY0LTY0cy0yOS02NC02NC02NC02NCAyOS02NCA2NC0yOSA2NC02NCA2NGgtNjRjLTM1IDAtNjQgMjktNjQgNjR6IiAvPgo8L3N2Zz4K") no-repeat 0 0/100% 100%;
+}
+
+.clipboard-copy-icon:hover {
+    background-color: #2da0e5;
+    opacity: 0.8;
+}
+
+.clipboard-copy-icon:active {
+    opacity: 1;
+}
+
+.clipboard-copy-icon:hover:before {
+    background-color: white;
+}
+
+
+/*     
+        imgStyle.width = '13px';
+        img.src = ;
+        imgStyle.marginTop = '-3px';
+        imgStyle.position = 'relative';
+        imgStyle.top = '3px'; */
+
+/* } */

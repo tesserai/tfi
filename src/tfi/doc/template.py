@@ -1,6 +1,6 @@
-from pygments import highlight
-from pygments.formatters import HtmlFormatter
-from pygments.lexers import PythonLexer, BashLexer
+# from pygments import highlight
+# from pygments.formatters import HtmlFormatter
+# from pygments.lexers import PythonLexer, BashLexer
 
 from jinja2 import Template as JinjaTemplate
 
@@ -15,14 +15,24 @@ from collections import OrderedDict
 
 import json
 import shlex
+import os.path as _os_path
+
+import tfi.tensor.codec
+from tfi.base import _recursive_transform
 
 _page_template_path = __file__[:-2] + "html"
 if _page_template_path.endswith("__init__.html"):
     _page_template_path = _page_template_path.replace("__init__.html", __name__.split('.')[-1] + '.html')
 
+def _read_template_file(subpath):
+    path = _os_path.join(_os_path.dirname(__file__), subpath)
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
 def _read_style_fragment():
-    hf = HtmlFormatter(style='paraiso-dark')
-    _style_fragment = hf.get_style_defs('.language-source')
+    _style_fragment = ""
+    # hf = HtmlFormatter(style='paraiso-dark')
+    # _style_fragment += hf.get_style_defs('.language-source')
 
     # _style_file = __file__[:-2] + "css"
     # if _style_file.endswith("__init__.css"):
@@ -61,64 +71,63 @@ def render(
         ]
         return " ".join(parts)
 
-    def python_source_for(method):
-        return "m.%s(%s)" % (method['name'], ", ".join(
+    def python_example_for(method, more_style_config={}):
+        s = "m.%s(%s)" % (method['name'], ", ".join(
             [
                 "%s=%r" % (k, v)
                 for k, v in method['example args'].items()
             ]
         ))
-    
-    def curl_source_for(method):
+
+        style_config = CreateGoogleStyle()
+        style_config.update(more_style_config)
+        s, _ = FormatCode(s, style_config=style_config)
+        s = s.strip()
+        return s
+
+    def json_repr(v, max_width=None, max_seq_length=None):
+        accept_mimetypes = {
+            # "image/png": lambda x: base64.b64encode(x),
+            "image/png": lambda x: x,
+            "text/plain": lambda x: x,
+            # Use python/jsonable so we to a recursive transform before jsonification.
+            "python/jsonable": lambda x: x,
+        }
+        r = _recursive_transform(v, lambda o: tfi.tensor.codec.encode(accept_mimetypes, o))
+        if r is not None:
+            v = r
+
+        return json.dumps(v, sort_keys=True, indent=2)
+
+    def python_repr(v, max_width=None, max_seq_length=None):
+        s, xform = inspect_html(v, max_width=max_width, max_seq_length=max_seq_length)
+        return xform(s)
+
+    def curl_example_for(method):
         def json_default(o):
-            print("json_default", o, type(o), dir(o))
             if hasattr(o, '__json__'):
                 return o.__json__()
             raise TypeError("Unserializable object {} of type {}".format(o, type(o)))
 
         def quoted_json_dumps(v):
             try:
-                print("v", type(v), dir(v))
                 s = json.dumps(v, default=json_default)
                 return shlex.quote(s)
             except ValueError as ex:
-                print("v", v)
                 print(ex)
                 return None
 
         return "curl %s" % " \\\n   ".join([
-            "http://%s/%s" % (host, method['name']),
+            "http://%s/api/%s" % (host, method['name']),
             *[
                 "-F %s=%s" % (k, quoted_json_dumps(v))
                 for k, v in method['example args'].items()
             ],
         ])
 
-    def highlight_shell_source(s):
-        s2 = highlight(s,
-                  BashLexer(),
-                  HtmlFormatter(cssclass='language-source language-curl'))
-        s2 = s2.replace("</pre>", """<span class="line-numbers">%s</span></pre>""" % ("".join(["<span></span>"] * (1 + s.count("\n")))))
-        return s2
-
-    def highlight_python_source(s, more_style_config={}):
-        style_config = CreateGoogleStyle()
-        style_config.update(more_style_config)
-        s, _ = FormatCode(s, style_config=style_config)
-        s = s.strip()
-
-        s2 = highlight(s,
-                  PythonLexer(),
-                  HtmlFormatter(cssclass='language-source language-python'))
-        s2 = s2.replace("</pre>", """<span class="line-numbers">%s</span></pre>""" % ("".join(["<span></span>"] * (1 + s.count("\n")))))
-        return s2
-
-    def highlight_python_value(o, max_width=None, max_seq_length=None):
-        s, xform = inspect_html(o, max_width=max_width, max_seq_length=max_seq_length)
-        r = highlight(s,
-                  PythonLexer(),
-                  HtmlFormatter(cssclass='language-python'))
-        return xform(r)
+    def html_repr(v):
+        s, xform = inspect_html(v, max_width=None, max_seq_length=None)
+        return xform(s)
 
     citation_id = 0
     citation_label_by_refname = {}
@@ -152,11 +161,12 @@ def render(
     ]
 
     return t.render(
-            python_source_for=python_source_for,
-            curl_source_for=curl_source_for,
-            highlight_shell_source=highlight_shell_source,
-            highlight_python_value=highlight_python_value,
-            highlight_python_source=highlight_python_source,
+            read_template_file=_read_template_file,
+            python_repr=python_repr,
+            json_repr=json_repr,
+            html_repr=html_repr,
+            python_example_for=python_example_for,
+            curl_example_for=curl_example_for,
             extra_scripts=extra_scripts,
             shorten_author_name=shorten_author_name,
             style_fragment=_read_style_fragment(),

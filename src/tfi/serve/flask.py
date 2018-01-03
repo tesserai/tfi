@@ -1,16 +1,24 @@
+import base64
 import json
 import inspect
 import logging
+import os
+import os.path
 import sys
+import werkzeug.serving
+
+import tfi.tensor.codec
+from tfi.base import _recursive_transform
 
 from collections import OrderedDict
 from functools import partial
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file, send_from_directory, abort
+from werkzeug.wsgi import pop_path_info, peek_path_info
 
 from tfi import data as tfi_data
 from tfi import pytorch as tfi_pytorch
-
-import tfi.tensor.codec
+from tfi.base import _recursive_transform
+from tfi.doc import documentation, render
 
 def _replace_ref(v):
     if not isinstance(v, dict) or '$ref' not in v:
@@ -37,9 +45,6 @@ def _field(req, field, annotation):
 def _default_if_empty(v, default):
     return v if v is not inspect.Parameter.empty else default
 
-from tfi.base import _recursive_transform
-
-import base64
 def _make_handler(model, method_name):
     method = getattr(model, method_name)
     sig = inspect.signature(method)
@@ -67,13 +72,17 @@ def _make_handler(model, method_name):
         return jsonify(result)
     return fn
 
-from tfi.doc import documentation, render
-
-def make_app(model, extra_scripts=""):
+def make_app(model, model_file_fn, extra_scripts=""):
     if model is None:
         raise Exception("No model given")
 
-    app = Flask(__name__)
+    static_folder = os.path.abspath(os.path.join(
+                    os.path.dirname(os.path.dirname(__file__)),
+                    'doc/static'))
+
+    app = Flask(__name__,
+            static_url_path="/static",
+            static_folder=static_folder)
     _setup_logger(app, logging.DEBUG)
 
     for method_name, method in inspect.getmembers(model, predicate=inspect.ismethod):
@@ -83,7 +92,17 @@ def make_app(model, extra_scripts=""):
         fn = _make_handler(model, method_name)
         fn.__name__ = method_name
         print("Registering", "/%s" % method_name)
-        app.route("/%s" % method_name, methods=["POST", "GET"])(fn)
+        app.route("/api/%s" % method_name, methods=["POST", "GET"])(fn)
+
+    @app.route("/meta/snapshot", methods=["GET"])
+    def meta_snapshot():
+        # For now we assume that this is a read-only model, so
+        # just return the codepath directly.
+        return send_file(model_file_fn())
+
+    @app.route("/object/<path:objectpath>", methods=["GET"])
+    def get_object(objectpath):
+        return objectpath
 
     @app.route("/", methods=["GET"])
     def docs():
@@ -93,46 +112,42 @@ def make_app(model, extra_scripts=""):
 
     return app
 
-import os
-def make_deferred_app(extra_scripts=""):
-    app = Flask(__name__)
-    _setup_logger(app, logging.DEBUG)
+class make_deferred_app(object):
+    def __init__(self, extra_scripts=""):
+        # A default, empty model_app
+        self._model_app = Flask(__name__)
 
-    model = [None]
-    @app.route('/specialize', methods=['POST'])
-    def load():
         codepath = '/userfunc/user'
+        specialize_app = Flask(__name__)
+        _setup_logger(specialize_app, logging.DEBUG)
+        self._specialize_app = specialize_app
 
-        # load source from destination python file
-        model[0] = tfi_pytorch.as_class(codepath)
-        return ""
-
-    @app.route('/', methods=['GET', 'POST', 'PUT', 'HEAD', 'OPTIONS', 'DELETE'])
-    def f():
-        if model[0] == None:
-            print("Generic container: no requests supported")
-            msg = "---HEADERS---\n%s\n--BODY--\n%s\n-----\n" % (request.headers, request.get_data())
-            return msg
-            # abort(500)
-
-        print("---HEADERS---\n%s\n" % (request.headers))
-        if 'X-Fission-Params-Method' not in request.headers:
-            return render(
-                    **documentation(model[0]),
-                    host=request.headers.get('Host', "$HOST"),
+        @specialize_app.route('/specialize', methods=['POST'])
+        def specialize():
+            self._model_app = make_app(
+                    tfi_pytorch.as_class(codepath),
+                    model_file_fn=lambda: codepath,
                     extra_scripts=extra_scripts)
+            return ""
 
-        method_name = request.headers.get('X-Fission-Params-Method', request.headers['X-Fission-Function-Name'])
-        return _make_handler(model[0], method_name)()
-    return app
+    def __call__(self, environ, start_response):
+        if environ['PATH_INFO'] == '/specialize':
+            return self._specialize_app(environ, start_response)
+        
+        if 'HTTP_X_FISSION_PARAMS_PATH_INFO' in environ:
+            environ['PATH_INFO'] = '/' + environ['HTTP_X_FISSION_PARAMS_PATH_INFO']
+        elif 'HTTP_X_FISSION_PARAMS_METHOD' in environ:
+            environ['PATH_INFO'] = '/api/' + environ['HTTP_X_FISSION_PARAMS_METHOD']
+
+        return self._model_app(environ, start_response)
 
 def run_deferred(host, port, **kw):
     app = make_deferred_app(**kw)
-    app.run(host=host, port=port)
+    werkzeug.serving.run_simple(hostname=host, port=port, application=app)
 
 def run(model, host, port, **kw):
     app = make_app(model, **kw)
-    app.run(host=host, port=port)
+    werkzeug.serving.run_simple(hostname=host, port=port, application=app)
 
 #
 # Logging setup.  TODO: Loglevel hard-coded for now. We could allow

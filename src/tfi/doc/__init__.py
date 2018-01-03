@@ -65,14 +65,15 @@ def documentation(model):
     citation_ids = {}
 
     def _resolve_citation_id(arxiv_id):
-        if arxiv_id in citation_ids:
-            return citation_ids[arxiv_id]
-        else:
+        if arxiv_id not in citation_ids:
             bibtex = arxiv_repo.resolve([arxiv_id])[0]
             bibparser.parse(bibtex, log_fp=sys.stderr)
             if bibtex.startswith("@article{"):
-                return bibtex.split(",", 1)[0][len("@article{"):]
-            return arxiv_id
+                citation_ids[arxiv_id] = bibtex.split(",", 1)[0][len("@article{"):]
+            else:
+                return arxiv_id
+
+        return citation_ids[arxiv_id]
 
     overview = None
     model_doc_sections = []

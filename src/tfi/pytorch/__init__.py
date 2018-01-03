@@ -171,8 +171,17 @@ class Meta(type):
                 return fn
             return install_annotation
 
+        def output_name_decorator(name, **kwargs):
+            def install_annotation(fn):
+                if 'return' not in fn.__annotations__:
+                    fn.__annotations__['return'] = {}
+                fn.__annotations__['return'][name] = kwargs
+                return fn
+            return install_annotation
+
         d = OrderedDict({
             'tfi_input': input_name_decorator,
+            'tfi_output': output_name_decorator, 
             'self': _GetAttrAccumulator(),
         })
         # NOTE(adamb) Remember to delete all of these! Every item in here is

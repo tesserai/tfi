@@ -55,7 +55,7 @@ p {
 }
 
 .method .method-copy {
-  padding: 0 7rem 0 7rem;
+  padding: 1rem 7rem 1rem 7rem;
 }
 
 .method h1 {
@@ -67,6 +67,16 @@ p {
 
 .method .method-copy-padding > p:first-of-type {
   margin-top: -1.8rem;
+}
+
+.method .method-copy-padding > p:last-of-type {
+  margin-bottom: 1rem;
+}
+
+.method .method-copy-padding img {
+  height: 0.8em;
+  vertical-align: text-bottom;
+  margin: 0.2ex;
 }
 
 .method h4 {
@@ -90,7 +100,7 @@ p {
   border-top: 1px solid #e1e8ed;
 }
 
-.method-list-item:not(:last-of-type) {
+.method-list-item {
   border-bottom: 1px solid #f0f4f7;
 }
 
@@ -100,8 +110,12 @@ p {
   list-style: none;
 }
 
+.method-list-item.has-example {
+  padding-bottom: 0.8rem;
+}
+
 .method-list.inputs h4::before {
-  content: "input";
+  content: "arguments";
 }
 
 .method-list.outputs h4::before {
@@ -146,8 +160,9 @@ p {
   overflow: hidden;
 }
 
-.method .method-area {
-    border-bottom: 1px solid var(--gray-border);
+.tabs-code {
+  margin-bottom: 0.5rem;
+  margin-top: 0.5rem;
 }
 
 .tabs-code>nav {
@@ -172,47 +187,11 @@ p {
   color: #0099e5
 }
 
-.line-numbers {
-  position: absolute;
-  pointer-events: none;
-  top: 1.25rem;
-  left: 2rem;
-  width: 1rem;
-  counter-reset: a;
-  opacity: 0.6;
-}
-
-.language-curl, .language-python {
-  position: relative;
-}
-
-pre .line-numbers>span {
-    pointer-events: none;
-    display: block;
-    counter-increment: a;
-}
-
-.language-bash .line-numbers>span:first-child:before, .language-curl .line-numbers>span:first-child:before {
-  content: '$';
-}
-
-.language-bash .line-numbers>span:before, .language-curl .line-numbers>span:before {
-  content: '>';
-}
-
-pre .line-numbers>span:before {
-    content: counter(a);
-    color: #bec5ca;
-    display: block;
-    text-align: right;
-    user-select: none;
-}
-
-.method-example-installation::before {
+/* .method-example-installation::before {
   content: "Installation";
-}
+} */
 
-.method-example-use::before {
+/* .method-example-use::before {
   content: "Example usage";
 }
 
@@ -223,11 +202,13 @@ pre .line-numbers>span:before {
 .method-example-output::before {
   content: "Example output";
 }
+ */
 
 .method-example-installation::before,
-.method-example-use::before,
-.method-example-input::before,
-.method-example-output::before {
+/* .method-example-use::before, */
+.method-example-input::before
+/* .method-example-output::before */
+{
   display: inline-block;
   color: #d0d4d7;
   text-transform: lowercase;
@@ -258,7 +239,7 @@ pre .line-numbers>span:before {
 .method-example-use,
 .method-example-input,
 .method-example-output {
-  overflow: hidden;
+  /* overflow: visible; */
 }
 
 .method-example-input img,
@@ -269,14 +250,10 @@ pre .line-numbers>span:before {
 .method-example {
   position: relative;
   /* margin-left: 54%; */
-  margin-top: 0;
-  margin-left: 7rem;
-  margin-right: 7rem;
-  padding-left: 0;
-  padding-right: 0;
-}
-
-.method-example-part {
+  margin: 0;
+  padding-top: 0;
+  padding-left: 7rem;
+  padding-right: 7rem;
   margin-bottom: 2rem;
 }
 
@@ -287,10 +264,11 @@ pre .line-numbers>span:before {
 
 .method-example pre {
   display: block;
-  color: #d0d0d0;
+  /* color: #d0d0d0; */
   white-space: pre-wrap;
   word-break: break-word;
-  background-color: #272b2d;
+  /* background-color: #272b2d; */
+  background-color: #f7f8f9;
   border-radius: 5px;
   line-height: 1.5;
   font-family: Source Code Pro,Menlo,monospace;
@@ -299,36 +277,19 @@ pre .line-numbers>span:before {
   font-size: 0.875rem;
 }
 
-.method-example-part {
-  /* padding: 1.875rem 0; */
+.method-example code, #formattedJson, .method-example .line-numbers-rows {
+  line-height: 1.5;
+  font-family: Source Code Pro,Menlo,monospace;
+  font-size: 0.875rem;
+}
+
+.method-example code a {
+  text-decoration: none;
+  color: #666;
 }
 
 .method-example-use:first-of-type {
   padding-top: 0;
-}
-
-#language-toggle {
-  left: 54.3%;
-  position: sticky;
-  position: -webkit-sticky;
-  top: var(--top-nav);
-  z-index: 10;
-  padding: .5rem 2rem;
-  background: #242729;
-  width: calc(46% - 4.13rem);
-  font-size: .75rem;
-  right: 0;
-}
-
-.language-item.active {
-  background: linear-gradient(180deg,#5abaf0,var(--blue));
-  padding: .5em .75em;
-  color: white;
-  border-radius: 5px;
-  text-shadow: 0 0 0 hsla(0,0%,100%,.5), 0 1px 1px #0e74c3;
-}
-li.language-item {
-  color: var(--gray-text-light);
 }
 
 :root {
@@ -348,7 +309,7 @@ li.language-item {
 header {
   position: fixed;
   width: 100%;
-  z-index: 11;
+  z-index: 10000000;
   top: 0;
 }
 nav.topnav {
@@ -424,7 +385,7 @@ nav select:focus {
   outline: none;
 }
 
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 48rem) {
   .topnav a:not(:first-child) {
     display: none;
   }
@@ -451,35 +412,29 @@ nav select:focus {
   }
 }
 
-.method {
-  max-width: 75rem;
-  margin: auto;
-}
-
-
 .side-bar-text-narrow {
   display: none;
 }
 
-@media screen and (max-width: 848px) {
+@media screen and (max-width: 53rem) {
   #documentation .method .method-copy {
-    max-width: calc(100% - 6rem);
+    /* max-width: calc(100% - 6rem); */
     width: auto;
     padding: 0 4rem 4rem 4rem;
     position: relative;
     float: none;
+    margin-right: 0;
     padding-bottom: 1em;
   }
   #documentation .method-example {
     position: relative;
     float: none;
     margin-left: 0;
-    padding-top: 4rem;
-    padding-bottom: 4rem;
-    background: var(--gray-code-dark);
+    margin-right: 0;
+    padding: 0 4rem 0 4rem;
   }
   #documentation .method-example-part {
-    padding: 1.875rem 0;
+    padding: 0 0 1.875rem 0;
   }
   #documentation #background {
     left: 0;
@@ -513,15 +468,25 @@ nav select:focus {
   border-top: 1px solid var(--gray-border);
 }
 
+.boundary {
+  border-bottom: 1px solid var(--gray-border);
+}
+
 /* TOP SECTION */
 #head {
-  text-align: left;
-  max-width: calc(75rem - 7rem);
+  text-align: center;
+  max-width: calc(64rem - 7rem);
   margin: auto;
   padding-left: 7rem;
-  padding-right: 0;
+  padding-right: 7rem;
 }
-@media screen and (max-width: 848px) {
+
+.method {
+  max-width: 64rem;
+  margin: 0 auto 2rem auto;
+}
+
+@media screen and (max-width: 53rem) {
   #head {
     padding-left: 4rem;
     padding-top: 0;
@@ -533,7 +498,7 @@ nav select:focus {
     margin: 0;
   }
 }
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 48rem) {
   #head {
     max-width: 100%;
   }
@@ -596,7 +561,7 @@ nav select:focus {
 }
 
 #appendix {
-  max-width: calc(75rem - 7rem);
+  max-width: calc(64rem - 7rem);
   padding-left: 7rem;
   padding-right: 7rem;
   margin-top: 4rem;
