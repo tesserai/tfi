@@ -12,7 +12,25 @@ class escaped(object):
         return self.s
 
 def img_png_html(d):
-    return """<img src="data:image/png;base64,%s">""" % base64.b64encode(d).decode()
+    if False:
+        return """<img src="data:image/png;base64,%s">""" % base64.b64encode(d).decode()
+
+    # TODO(adamb) Actually detect image dimensions and host the image itself somewhere, don't
+    #     keep using data URIs
+    width = 768
+    height = 512
+    datauri = "data:image/png;base64,%s" % base64.b64encode(d).decode()
+    small = datauri
+    large = datauri
+
+    return """<figure style="display: inline-block; margin: 0" itemprop="associatedMedia" itemscope itemtype="http://schema.org/ImageObject">
+  <a href="%s" itemprop="contentUrl" data-size="%sx%s">
+    <img src="%s" itemprop="thumbnail" alt="Image description" />
+  </a>
+  <figcaption itemprop="caption description" style="display: none;"></figcaption>
+</figure>""" % (large, width, height, small)
+
+    
 
 def text_plain(d):
     print("text_plain", d)
@@ -35,7 +53,10 @@ def inspect(o, max_width=None, max_seq_length=None):
         replacements[k] = v
         return escaped(k)
 
+    image_count = 0
     def genpng(v):
+        nonlocal image_count
+        image_count += 1
         return genreplacement(img_png_html(v))
 
     accept_mimetypes = {"image/png": genpng, "text/plain": text_plain}
@@ -49,6 +70,11 @@ def inspect(o, max_width=None, max_seq_length=None):
     if max_seq_length is None:
         max_seq_length = 1000
     r = pretty(o, max_width=max_width, max_seq_length=max_seq_length)
+
+    # If there are images in this expression, make them zoomable.
+    if image_count:
+        r = """<div itemscope itemtype="http://schema.org/ImageGallery">%s</div>""" % r
+
     xform = replaceall
     return r, xform
 

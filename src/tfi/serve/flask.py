@@ -78,7 +78,7 @@ def make_app(model, model_file_fn, extra_scripts=""):
 
     static_folder = os.path.abspath(os.path.join(
                     os.path.dirname(os.path.dirname(__file__)),
-                    'doc/static'))
+                    'static'))
 
     app = Flask(__name__,
             static_url_path="/static",
