@@ -30,6 +30,7 @@ class _DocutilsSettings(object):
         self.strip_elements_with_classes = False
         self.strip_classes = False
         self.title = ''
+        self.cloak_email_addresses = True
         self.bibtex_entries_by_refname = bibtex_entries_by_refname
         self.citation_label_by_refname = citation_label_by_refname
 

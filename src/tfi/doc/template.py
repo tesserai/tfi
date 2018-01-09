@@ -142,7 +142,7 @@ def render(
         return references[citation_refname]
 
     # TODO(adamb) What about arxiv ids already within []_ ??
-    parsed = _parse_rst(overview, "<string>",
+    parsed = _parse_rst(overview or "", "<string>",
             citation_label_by_refname_fn, reference_fn)
 
     hover_divs = []
