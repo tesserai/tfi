@@ -1,4 +1,4 @@
-name: someenv
+name: pytorch
 channels:
   - defaults
   - conda-forge
@@ -9,6 +9,7 @@ dependencies:
   - pytorch
   - torchvision
   - pip:
+    - cloudpickle
     - requests==2.14.2
     - Flask==0.12.2
     - gunicorn==19.7.1

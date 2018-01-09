@@ -1,4 +1,4 @@
-Dockerfile
+conda/Dockerfile
 design/
 dist/
 scratch/
