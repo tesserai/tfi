@@ -34,11 +34,11 @@ def _detect_paragraph_citations(resolve_citation_id, paragraph):
     # end to avoid wasting string allocations.
     for (start, end), arxiv_id in arxiv_id_matches:
         citation_id = resolve_citation_id(arxiv_id)
-        suffix = paragraph[end+1:prev_start]
+        suffix = paragraph[end:prev_start]
         new_paragraph_parts.append(suffix)
-        new_paragraph_parts.append("]_ ")
+        new_paragraph_parts.append("]_")
         new_paragraph_parts.append(citation_id)
-        new_paragraph_parts.append(" [")
+        new_paragraph_parts.append("[")
         prev_start = start
     if prev_start != 0:
         new_paragraph_parts.append(paragraph[0:prev_start])
