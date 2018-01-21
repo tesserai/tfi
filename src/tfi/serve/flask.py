@@ -5,7 +5,6 @@ import logging
 import os
 import os.path
 import sys
-import werkzeug.serving
 
 import tfi.tensor.codec
 from tfi.base import _recursive_transform
@@ -140,14 +139,6 @@ class make_deferred_app(object):
             environ['PATH_INFO'] = '/api/' + environ['HTTP_X_FISSION_PARAMS_METHOD']
 
         return self._model_app(environ, start_response)
-
-def run_deferred(host, port, **kw):
-    app = make_deferred_app(**kw)
-    werkzeug.serving.run_simple(hostname=host, port=port, application=app)
-
-def run(model, host, port, **kw):
-    app = make_app(model, **kw)
-    werkzeug.serving.run_simple(hostname=host, port=port, application=app)
 
 #
 # Logging setup.  TODO: Loglevel hard-coded for now. We could allow

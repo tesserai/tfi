@@ -101,10 +101,12 @@ def run(argns, remaining_args):
         """
 
         host, port = argns.bind.split(':')
+        port = int(port)
         if model is None:
-            from tfi.serve import run_deferred
-            run_deferred(host=host, port=port, extra_scripts=segment_js)
+            from tfi.serve import run_deferred as serve_deferred
+            serve_deferred(host=host, port=port, extra_scripts=segment_js)
         else:
+            from tfi.serve import run as serve
             def model_file_fn():
                 if argns.specifier_source and not argns.specifier_via_python:
                     return argns.specifier_source
@@ -113,7 +115,7 @@ def run(argns, remaining_args):
                     tfi.pytorch.export(f.name, model)
                     print(" done", flush=True)
                     return f.name
-            run(model, host=host, port=port, extra_scripts=segment_js, model_file_fn=model_file_fn)
+            serve(model, host=host, port=port, extra_scripts=segment_js, model_file_fn=model_file_fn)
 
     if argns.interactive is None:
         argns.interactive = not batch and not exporting and not serving and not publishing
@@ -149,5 +151,6 @@ def run(argns, remaining_args):
                 print(" done", flush=True)
                 url = _publish(f)
         print(url)
+
 if __name__ == '__main__':
     run(*parser.parse_known_args(sys.argv[1:]))

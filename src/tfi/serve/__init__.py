@@ -1,21 +1,19 @@
-from tfi.serve.flask import run_deferred as flask_run_deferred
-from tfi.serve.flask import run as flask_run
+from tfi.serve.flask import make_app, make_deferred_app
 
-from tfi.serve.gunicorn import run_deferred as gunicorn_run_deferred
-from tfi.serve.gunicorn import run as gunicorn_run
-
-def run_deferred(**kw)
+def _run_app(app, host, port):
     try:
-        return gunicorn_run_deferred(**kw)
+        from tfi.serve.gunicorn import run_app as gunicorn_run_app
+        return gunicorn_run_app(app, host=host, port=port)
     except ModuleNotFoundError:
         pass
 
-    return flask_run_deferred(**kw)
+    import werkzeug.serving
+    return werkzeug.serving.run_simple(hostname=host, port=port, application=app)
 
-def run(model, **kw)
-    try:
-        return gunicorn_run(model, **kw)
-    except ModuleNotFoundError:
-        pass
+def run_deferred(*, host, port, **kw):
+    app = make_deferred_app(**kw)
+    return _run_app(app, host=host, port=port)
 
-    return flask_run(model, **kw)
+def run(model, *, host, port, **kw):
+    app = make_app(model, **kw)
+    return _run_app(app, host=host, port=port)
