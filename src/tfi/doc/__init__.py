@@ -5,7 +5,7 @@ import sys
 from collections import OrderedDict as _OrderedDict
 
 from tfi.parse.docstring import GoogleDocstring as _GoogleDocstring
-from tfi.resolve.arxiv import discover_arxiv_ids as _discover_arxiv_ids
+from tfi.parse.arxiv import discover_arxiv_ids as _discover_arxiv_ids
 from tfi.resolve.arxiv import ArxivBibtexRepo as _ArxivBibtexRepo
 from tfi.resolve.arxiv2bib import arxiv2bib as _arxiv2bib
 from tfi.resolve.git import git_authorship as _git_authorship
