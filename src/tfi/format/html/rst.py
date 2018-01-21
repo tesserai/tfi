@@ -31,6 +31,11 @@ class _DocutilsSettings(object):
         self.strip_classes = False
         self.title = ''
         self.cloak_email_addresses = True
+        self.compact_lists = True
+        self.raw_enabled = True
+        self.file_insertion_enabled = True
+        self.input_encoding = 'utf-8'
+        self.input_encoding_error_handler = None
         self.bibtex_entries_by_refname = bibtex_entries_by_refname
         self.citation_label_by_refname = citation_label_by_refname
 
@@ -118,6 +123,8 @@ class _HTMLTranslator(nodes.NodeVisitor):
         # author, date, etc.
         self.docinfo = []
         self.body = []
+        self.sections = []
+        self.body_section_start_indices = []
         self.fragment = []
         self.section_level = 0
         self.initial_header_level = int(settings.initial_header_level)
@@ -1244,15 +1251,26 @@ class _HTMLTranslator(nodes.NodeVisitor):
     def depart_rubric(self, node):
         self.body.append('</p>\n')
 
-    # TODO: use the new HTML 5 element <section>?
     def visit_section(self, node):
         self.section_level += 1
+        self.body_section_start_indices.append(len(self.body))
         self.body.append(
-            self.starttag(node, 'div', CLASS='section'))
+            self.starttag(node, 'section'))
 
     def depart_section(self, node):
         self.section_level -= 1
-        self.body.append('</div>\n')
+        self.body.append('</section>\n')
+        start_ix = self.body_section_start_indices.pop()
+
+        id = node.get("ids")[0]
+        section_title_ix = node.first_child_matching_class(nodes.title)
+        title = node[section_title_ix].astext() if section_title_ix is not None else None
+        self.sections.append({
+            'id': id,
+            'title': title,
+            'body': "".join(self.body[start_ix:]),
+        })
+        del self.body[start_ix:]
 
     # TODO: use the new HTML5 element <aside>? (Also for footnote text)
     def visit_sidebar(self, node):
@@ -1587,8 +1605,10 @@ class _AddCitationNumbers(Transform):
                 new = nodes.Text(citation_id_str, citation_id_str)
                 citation_ref.replace(old, new)
 
-def parse_rst(source, source_path, citation_label_by_refname, bibtex_entries_by_refname):
+def parse_rst(source, source_path, initial_header_level, id_prefix, citation_label_by_refname, bibtex_entries_by_refname):
     settings = _DocutilsSettings(citation_label_by_refname, bibtex_entries_by_refname)
+    settings.initial_header_level = initial_header_level
+    settings.id_prefix = id_prefix
     document = new_document(source_path, settings)
     parser = Parser()
     parser.parse(source, document)
@@ -1609,5 +1629,5 @@ def parse_rst(source, source_path, citation_label_by_refname, bibtex_entries_by_
         'title': "\n".join(visitor.title),
         'subtitle': "\n".join(visitor.subtitle),
         'body': "".join(visitor.body),
-        "hover_divs": visitor.hover_divs,
+        'sections': visitor.sections,
     }

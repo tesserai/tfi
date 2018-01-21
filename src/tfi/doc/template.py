@@ -142,17 +142,15 @@ def render(
         return references[citation_refname]
 
     # TODO(adamb) What about arxiv ids already within []_ ??
-    parsed = _parse_rst(overview or "", "<string>",
+    parsed = _parse_rst(overview or "", "<string>", 3, 'overview-',
             citation_label_by_refname_fn, reference_fn)
 
-    hover_divs = []
-    hover_divs.extend(parsed['hover_divs'])
     def refine_method(method):
         method = dict(method)
-        parsed_overview = _parse_rst(method['overview'], "<string>",
+        parsed_overview = _parse_rst(method['overview'], "<string>", 3,
+                'method-%s-' % method['name'],
                 citation_label_by_refname_fn, reference_fn)
         method['overview'] = parsed_overview['body']
-        hover_divs.extend(parsed_overview['hover_divs'])
         return method
 
     methods = [
@@ -185,6 +183,18 @@ def render(
 
     description = visible_text_for(parsed['subtitle'])
 
+    body_sections = []
+    if parsed['body']:
+        body_sections.append({'title': 'overview', 'body': parsed['body']})
+
+    appendix_section_ids = ['overview-dataset']
+    appendix_sections = []
+    for section in parsed['sections']:
+        if section['id'] in appendix_section_ids:
+            appendix_sections.append(section)
+        else:
+            body_sections.append(section)
+
     return t.render(
             read_template_file=_read_template_file,
             python_repr=python_repr,
@@ -200,10 +210,11 @@ def render(
             description=description,
             bibliography_cite=citation_bibliography_html,
             overview=parsed['body'],
+            body_sections=body_sections,
+            appendix_sections=appendix_sections,
             authors=authors,
             hyperparameters=hyperparameters,
             implementation_notes=implementation_notes,
-            hover_divs=hover_divs,
             references=OrderedDict([
                 (refname, references[refname])
                 for refname in citation_label_by_refname

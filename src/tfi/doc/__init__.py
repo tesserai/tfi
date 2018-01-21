@@ -158,8 +158,8 @@ _ = dict(%s)
                 {
                     "name": author['name'],
                     "url": author['url'],
-                    "affiliation_name": "Code Contributor",
-                    "affiliation_url": author['commits_url'],
+                    "role_noun": "Commits",
+                    "role_url": author['commits_url'],
                 }
                 for author in authors
             ],
