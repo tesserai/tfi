@@ -569,6 +569,40 @@ nav select:focus {
   margin-right: auto;
 }
 
+/* CITATION STYLING */
+.citation-number {
+  color: var(--gray-text-medium);
+  font-size: 0.83333rem;
+}
+.dt-hover-box {
+  width: calc(64rem - 14rem);
+  box-sizing: border-box;
+  margin: auto;
+  font-size: 1rem;
+  background-color: rgb(250, 250, 250);
+  color: var(--gray-text-dark);
+  text-align: left;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 1s;
+  box-shadow: 0 0 7px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  border: 1px solid var(--gray-border);
+  padding: 1rem 2rem;
+}
+.dt-hover-box p,
+.dt-hover-box span {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+}
+
+.citation-wrapper:hover .dt-hover-box {
+  visibility: visible;
+  opacity: 1;
+}
+
 #appendix h3 {
   color: var(--gray-text-medium);
   font-size: 1.125rem;
@@ -662,45 +696,3 @@ nav select:focus {
 }
 
 /* CITATION STYLING */
-.citation-number {
-  color: var(--gray-text-medium);
-  font-size: 0.83333rem;
-}
-.citation-wrapper {
-  position: relative;
-  display: inline-block;
-}
-.citation-wrapper .citation-hover-box {
-  visibility: hidden;
-  width: 400px;
-  max-width: 50vw;
-  background-color: rgb(250, 250, 250);
-  color: var(--gray-text-dark);
-  text-align: left;
-  border-radius: 6px;
-  position: absolute;
-  z-index: 2;
-  top: 2rem;
-  /*bottom: -150%;*/
-  left: 50%;
-  margin-left: -200px;
-  opacity: 0;
-  transition: opacity 1s;
-  box-shadow: 0 0 7px rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-  border: 1px solid var(--gray-border);
-  padding: 2rem;
-
-}
-.citation-wrapper .citation-hover-box p,
-.citation-wrapper .citation-hover-box span {
-  text-overflow: ellipsis;
-  overflow: hidden;
-  padding: 0;
-  margin: 0;
-}
-
-.citation-wrapper:hover .citation-hover-box {
-  visibility: visible;
-  opacity: 1;
-}

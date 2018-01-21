@@ -118,7 +118,6 @@ class _HTMLTranslator(nodes.NodeVisitor):
         # author, date, etc.
         self.docinfo = []
         self.body = []
-        self.hover_divs = []
         self.fragment = []
         self.section_level = 0
         self.initial_header_level = int(settings.initial_header_level)
@@ -458,38 +457,24 @@ class _HTMLTranslator(nodes.NodeVisitor):
             self.in_footnote_list = False
 
     def visit_citation_reference(self, node):
+        nodeid = node.get('ids')[0]
+        hover_id = "#" + nodeid + " .dt-hover-box"
+
         refname = node['refname']
-        hover_id = "ref-" + refname.replace(".", "-")
         citation_label = self.document.settings.citation_label_by_refname(refname)
-        node['hover-id'] = hover_id
-        self.body.append(
+        ent = self.document.settings.bibtex_entries_by_refname(refname)
+        self.body.extend([
                 self.starttag(
                     node,
                     'dt-cite',
-                    '<span id="citation-%s" data-hover-ref="%s"><span class="citation-number">[' % (citation_label, hover_id),
+                    '<span style="display:none" class="dt-hover-box">%s</span>' % citation_hover_html(ent),
                     key=node['refname']
-                )
-        )
-        # href = '#'
-        # if 'refid' in node:
-        #     href += node['refid']
-        # elif 'refname' in node:
-        #     href += self.document.nameids[node['refname']]
-        # # else: # TODO system message (or already in the transform)?
-        # # 'Citation reference missing.'
-        # self.body.append(self.starttag(
-        #     node, 'a', '[', CLASS='citation-reference', href=href))
+                ),
+                '<span data-hover-ref="%s"><span class="citation-number">[' % hover_id,
+        ])
 
     def depart_citation_reference(self, node):
-        refname = node['refname']
-
-        ent = self.document.settings.bibtex_entries_by_refname(refname)
         self.body.append(']</span></span></dt-cite>')
-        self.hover_divs.extend([
-            '<div style="display:none;" class="dt-hover-box" id="%s">' % node['hover-id'],
-            citation_hover_html(ent),
-            '</div>',
-        ])
 
      # classifier
     # ----------

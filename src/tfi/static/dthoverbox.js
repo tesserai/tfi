@@ -1,42 +1,32 @@
 (function () {
     "use strict";
-    function make_hover_css(pos) {
+    function make_hover_css(top) {
         var pretty = window.innerWidth > 600;
-        var padding = pretty ? 18 : 12;
-        var outer_padding = pretty ? 18 : 0;
-        var bbox = document.querySelector("body").getBoundingClientRect();
-        var left = pos[0] - bbox.left, top = pos[1] - bbox.top;
-        var width = Math.min(window.innerWidth - 2 * outer_padding, 648);
-        left = Math.min(left, window.innerWidth - width - outer_padding);
-        width = width - 2 * padding;
         return (`position: absolute;
          background-color: #FFF;
          opacity: 0.95;
-         max-width: ${width}px;
-         top: ${top}px;
-         left: ${left}px;
+         top: calc(${top}px + 1.5rem);
+         display: block;
          border: 1px solid rgba(0, 0, 0, 0.25);
-         padding: ${padding}px;
          border-radius: ${pretty ? 3 : 0}px;
          box-shadow: 0px 2px 10px 2px rgba(0, 0, 0, 0.2);
          z-index: ${1e6};`);
     }
 
-
-    function DtHoverBox(div_id) {
-        this.div = document.querySelector("#" + div_id);
+    function DtHoverBox(div_sel) {
+        this.div = document.querySelector(div_sel);
         this.visible = false;
         this.bindDivEvents();
-        DtHoverBox.box_map[div_id] = this;
+        DtHoverBox.box_map[div_sel] = this;
     }
 
     DtHoverBox.box_map = {};
 
-    DtHoverBox.get_box = function get_box(div_id) {
-        if (div_id in DtHoverBox.box_map) {
-            return DtHoverBox.box_map[div_id];
+    DtHoverBox.get_box = function get_box(div_sel) {
+        if (div_sel in DtHoverBox.box_map) {
+            return DtHoverBox.box_map[div_sel];
         } else {
-            return new DtHoverBox(div_id);
+            return new DtHoverBox(div_sel);
         }
     }
 
@@ -51,7 +41,7 @@
 
     DtHoverBox.prototype.showAtNode = function showAtNode(node) {
         var bbox = node.getBoundingClientRect();
-        this.show([bbox.right, bbox.bottom]);
+        this.show(node.offsetTop);
     }
 
     DtHoverBox.prototype.hide = function hide() {
