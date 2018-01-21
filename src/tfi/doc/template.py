@@ -160,6 +160,31 @@ def render(
         for method in methods
     ]
 
+    def visible_text_for(html):
+        import re
+        from bs4 import BeautifulSoup
+        from bs4.element import Comment, NavigableString
+        
+        def visible(element):
+            if element.parent.name in ['style', 'script', '[document]', 'head', 'title']:
+                return False
+            elif isinstance(element, Comment):
+                return False
+
+            # Hidden if any parent has inline style "display: none"
+            parent = element.parent
+            while parent:
+                if 'style' in parent.attrs and re.match('display:\s*none', parent['style']):
+                    return False
+                parent = parent.parent
+            return True
+        
+        soup = BeautifulSoup(html, "html5lib")
+        data = soup.findAll(text=True)
+        return re.sub('\s+', ' ', " ".join(t.strip() for t in filter(visible, data)))
+
+    description = visible_text_for(parsed['subtitle'])
+
     return t.render(
             read_template_file=_read_template_file,
             python_repr=python_repr,
@@ -172,6 +197,7 @@ def render(
             style_fragment=_read_style_fragment(),
             title=parsed['title'],
             subhead=parsed['subtitle'],
+            description=description,
             bibliography_cite=citation_bibliography_html,
             overview=parsed['body'],
             authors=authors,
