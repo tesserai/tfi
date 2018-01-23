@@ -113,7 +113,7 @@ class _driver(object):
         return _decode(mimetype, shape, dtype, handle)
 
     def _decode_file_path(self, shape, dtype, mimetype, path):
-        if path.startswith("//"):
+        if path.startswith("tfi://"):
             path = "/Users/adamb/github/tesserai/tfi/src/tfi/data/%s" % path[2:]
         with open(path, 'rb') as f:
             return _decode(mimetype, shape, dtype, f)

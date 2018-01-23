@@ -185,8 +185,8 @@ class path(_Source):
         return self._mimetype or _mimetypes.guess_type("file://%s" % self._resolve_path())[0]
 
     def _resolve_path(self):
-        if self._path.startswith("//"):
-            return os.path.join(os.path.dirname(__file__), self._path[2:])
+        if self._path.startswith("tfi://"):
+            return os.path.join(os.path.dirname(__file__), self._path[6:])
         return self._path
 
     def __setstate__(self, d):
@@ -267,7 +267,7 @@ def json(s):
             return v
         if '$ref' in v:
             ref = v['$ref']
-            if ref.startswith('http://') or ref.startswith('https://') or ref.startswith('//'):
+            if ref.startswith('http://') or ref.startswith('https://') or ref.startswith('tfi://'):
                 return file(ref, v.get('$mimetype', None))
             return v
         if '$base64' in v:
