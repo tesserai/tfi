@@ -157,8 +157,6 @@
         nodeIndex++;
       }
 
-
-
       if (index >= 0) {
         // open PhotoSwipe if valid index found
         openPhotoSwipe(index, clickedGallery);
@@ -291,14 +289,7 @@
         </h5>
         <p class="method-list-item-description">{{description|join("\n")}}</p>
         {% if name in examples %}
-<span style="
-    display: block;
-    margin-top: 0.5rem;
-    margin-left: 11.8rem;
-    color: var(--gray-text-light);
-    font-size: 4rem;
-    font-weight: 100;
-">{{html_repr(examples[name])}}</span>
+<span class="method-list-item-example">{{html_repr(examples[name])}}</span>
       {% endif %}
       </li>
       {% endfor %}
@@ -394,51 +385,60 @@
       </div>
       {% endif %}
         <h1>{{title}}</h1>
-        <h2>{{subhead}}</h2>
+        <p>{{subhead}}</p>
     </div>
-    <div class="hr"></div>
 
     {% for section in body_sections %}
       {{section['body']}}
     {% endfor %}
 
-    <div class="hr"></div>
-    <section class="method" id="methods-overview">
-      <div class="method-copy">
-        <h1>Methods</h1>
-        <p>
-          <b>The examples below are designed to work as-is.</b> The curl examples all work without downloading or installing
-          any software. The Python examples only assume you've installed TFI locally (using the directions above) and have
-          Python 3+. They will download any additional required files automatically.
-        </p>
-      </div>
+    <section>
+      <h2>Getting Started</h2>
+      <p>
+        You can this API remotely without installing any software. You can also run this API locally without internet access.
+        Local access to the API is possible from both the command line and from within Python.
+        Use the command below to get setup and confirm the API is working for you.
+      </p>
+
       <div class="method-example">
-        <div class="method-example-installation method-example-code method-example-code-python" style="display: none;">
+        <div class="method-example-code" data-language="curl">
+          <pre><code class="language-bash line-numbers">curl http://{{host}}/ok</code></pre>
+        </div>
+
+        <div class="method-example-code" data-language="python" style="display: none;">
           <pre><code class="language-bash line-numbers">pip install tfi
 tfi http://{{host}}</code></pre>
         </div>
+        {{language_tabs()}}
       </div>
+    </section>
+
+    <section>
+      <h2>Method Documentation</h2>
+      <p>
+        The methods below all have examples that work as-is. Copy and run them in your terminal to start experimenting.
+      </p>
     </section>
 
     {% for method in methods %}
     <section class="method" id="method-{{method['name']}}">
       <div class="method-copy">
-        <h1>{{method['name']}} method</h1>
+        <h3>{{method['name']}} method</h3>
         {{method['overview']}}
       </div>
+      {% if method['args'] | length > 0 %}
       <div class="method-copy">
-        {% if method['args'] | length > 0 %}
           {{render_args('inputs', method['args'], method['example args'])}}
-        {% endif %}
       </div>
+      {% endif %}
       <div class="method-example">
-        {{language_tabs()}}
-        <div class="method-example-use method-example-code method-example-code-curl">
+        <div class="method-example-code" data-language="curl">
           <pre><code class="language-curl line-numbers">{{curl_example_for(method)}}</code></pre>
         </div>
-        <div class="method-example-use method-example-code method-example-code-python" style="display: none;">
+        <div class="method-example-code" data-language="python" style="display: none;">
           <pre><code class="language-python line-numbers">{{python_example_for(method, {'COLUMN_LIMIT': 50})}}</code></pre>
         </div>
+        {{language_tabs()}}
       </div>
       <div class="method-copy">
         {% if method['returns'] | length > 0 %}
@@ -446,10 +446,10 @@ tfi http://{{host}}</code></pre>
         {% endif %}
       </div>
       <div class="method-example">
-        <div class="method-example-output method-example-code method-example-code-curl">
+        <div class="method-example-code" data-language="curl">
           <pre><code class="language-json2">{{json_repr(method['example result'], 50, 7)}}</code></pre>
         </div>
-        <div class="method-example-output method-example-code method-example-code-python" style="display: none;">
+        <div class="method-example-code" data-language="python" style="display: none;">
           <pre><code class="language-python">{{python_repr(method['example result'], 50, 7)}}</code></pre>
         </div>
       </div>
@@ -457,6 +457,7 @@ tfi http://{{host}}</code></pre>
     {% endfor %}
 
     {% if references | length > 0 or hyperparameters | length > 0 or implementation_notes | length > 0 or appendix_sections | length > 0 %}
+
     <div id="appendix">
     {% for section in appendix_sections %}
       {{section['body']}}
@@ -474,7 +475,7 @@ tfi http://{{host}}</code></pre>
     {% endif %}
     {% if authors | length > 0 %}
     <section id="authorship">
-      <h3>Contributors</h3>
+      <h2>Contributors</h2>
       {% for author in authors %}
       <span class="author">
         <span class="author-name">
@@ -488,7 +489,7 @@ tfi http://{{host}}</code></pre>
 
     {% if hyperparameters | length > 0 %}
     <section class="hyperparameters" id="hyperparameters">
-      <h3>Hyperparameters</h3>
+      <h2>Hyperparameters</h2>
       <div class="method-copy">
         {{render_args('hyperparameters', hyperparameters)}}
       </div>
@@ -497,7 +498,7 @@ tfi http://{{host}}</code></pre>
     
     {% if references | length > 0 %}
     <section class="references" id="references">
-      <h3>References</h3>
+      <h2>References</h2>
       <div class="method-copy">
         <ol>
           {% for bibtex_entry in references.values() %}
@@ -612,7 +613,7 @@ tfi http://{{host}}</code></pre>
       "use strict";
 
       // Cache NodeLists since these won't change during page lifetime.
-      var codeExamples = document.querySelectorAll('.method-example-code');
+      var codeExamples = document.querySelectorAll('.method-example-code[data-language]');
       var languageChoiceSel = ".nav-languages a[data-language]";
       var selectedClass = "selected";
       var selectedLanguageChoiceSel = languageChoiceSel + "." + selectedClass;
@@ -620,10 +621,9 @@ tfi http://{{host}}</code></pre>
 
       var chooseThisLanguage = function() {
         var lang = this.dataset["language"];
-        var className = `method-example-code-${lang}`;
 
         codeExamples.forEach(function (elt) {
-          elt.style.display = elt.classList.contains(className) ? 'block' : 'none';
+          elt.style.display = elt.dataset["language"] === lang ? 'block' : 'none';
         });
 
         languageChoices.forEach(function(e) {
@@ -727,13 +727,17 @@ tfi http://{{host}}</code></pre>
       })
     </script>
     <script>
-      document.querySelectorAll(".language-json2").forEach(function (e) {
-        var val = JSON.parse(e.innerText);
-        var elt = jsonObjToHTML(val, 10);
-        e.parentNode.parentNode.appendChild(elt);
-        e.parentNode.remove();
-        addCopyToClipboard(elt.parentNode, e.innerText);
-      });
+      setTimeout(function() {
+        document.querySelectorAll(".language-json2").forEach(function (e) {
+          var text = e.innerText;
+          var newParent = e.parentNode;
+          e.remove();
+          var val = JSON.parse(text);
+          var elt = jsonObjToHTML(val, 10);
+          addCopyToClipboard(newParent, text);
+          newParent.appendChild(elt);
+        });
+      }, 0);
     </script>
     <script src="static/dthoverbox.js"></script>
   </body>

@@ -103,6 +103,10 @@ def make_app(model, model_file_fn, extra_scripts=""):
     def get_object(objectpath):
         return objectpath
 
+    @app.route("/ok", methods=["GET"])
+    def ok():
+        return """{"status":"OK"}"""
+
     @app.route("/", methods=["GET"])
     def docs():
         return render(**documentation(model),

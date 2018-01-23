@@ -5,6 +5,33 @@ from docutils.utils.error_reporting import locale_encoding, ErrorOutput, ErrorSt
 
 import sys
 
+from io import StringIO
+from docutils import nodes, utils
+from docutils.transforms import TransformError, Transform
+
+from docutils.parsers.rst import Directive
+from docutils.parsers.rst import directives
+
+from tfi.parse.docstring import GoogleDocstring as _GoogleDocstring
+
+class demo_block(nodes.General, nodes.FixedTextElement): pass
+
+class _DemoMethod(Directive):
+    required_arguments = 1
+    optional_arguments = 0
+    final_argument_whitespace = True
+    option_spec = {}
+    has_content = True
+
+    def run(self):
+        self.assert_has_content()
+        n = demo_block()
+        n.attributes["demo-method"] = self.arguments[0]
+        n.attributes["demo-doc"] = _GoogleDocstring(docstring=self.content).result()
+        return [n]
+
+directives.register_directive('demo-method', _DemoMethod)
+
 class _DocutilsSettings(object):
     def __init__(self, citation_label_by_refname, bibtex_entries_by_refname):
         # Defaults from docutils/frontend.py
@@ -38,10 +65,6 @@ class _DocutilsSettings(object):
         self.input_encoding_error_handler = None
         self.bibtex_entries_by_refname = bibtex_entries_by_refname
         self.citation_label_by_refname = citation_label_by_refname
-
-from io import StringIO
-from docutils import nodes, utils
-from docutils.transforms import TransformError, Transform
 
 # From docutils/writers/html_plain/__init__.py
 # .. coding: utf8
@@ -1251,6 +1274,12 @@ class _HTMLTranslator(nodes.NodeVisitor):
     def depart_rubric(self, node):
         self.body.append('</p>\n')
 
+    def visit_demo_block(self, node):
+        self.body.append(self.settings.demo_block_html(node['demo-method'], node['demo-doc']))
+
+    def depart_demo_block(self, node):
+        pass
+
     def visit_section(self, node):
         self.section_level += 1
         self.body_section_start_indices.append(len(self.body))
@@ -1262,7 +1291,8 @@ class _HTMLTranslator(nodes.NodeVisitor):
         self.body.append('</section>\n')
         start_ix = self.body_section_start_indices.pop()
 
-        id = node.get("ids")[0]
+        ids = node.get("ids")
+        id = ids[0] if ids else None
         section_title_ix = node.first_child_matching_class(nodes.title)
         title = node[section_title_ix].astext() if section_title_ix is not None else None
         self.sections.append({
@@ -1605,10 +1635,11 @@ class _AddCitationNumbers(Transform):
                 new = nodes.Text(citation_id_str, citation_id_str)
                 citation_ref.replace(old, new)
 
-def parse_rst(source, source_path, initial_header_level, id_prefix, citation_label_by_refname, bibtex_entries_by_refname):
+def parse_rst(source, source_path, initial_header_level, id_prefix, citation_label_by_refname, bibtex_entries_by_refname, demo_block_html):
     settings = _DocutilsSettings(citation_label_by_refname, bibtex_entries_by_refname)
     settings.initial_header_level = initial_header_level
     settings.id_prefix = id_prefix
+    settings.demo_block_html = demo_block_html
     document = new_document(source_path, settings)
     parser = Parser()
     parser.parse(source, document)

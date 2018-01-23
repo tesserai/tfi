@@ -8,6 +8,8 @@ from tfi.format.html.bibtex import citation_bibliography_html
 from tfi.format.html.python import inspect_html
 from tfi.format.html.rst import parse_rst as _parse_rst
 
+from tfi.parse.python import parse_example_args as _parse_example_args
+
 from yapf.yapflib.yapf_api import FormatCode
 from yapf.yapflib.style import CreateGoogleStyle
 
@@ -59,18 +61,6 @@ def render(
     with open(_page_template_path, encoding='utf-8') as f:
         t = JinjaTemplate(f.read())
 
-    def shorten_author_name(name, max):
-        if len(name) < max:
-            return name
-
-        parts = name.split(" ")
-        # Shorten to first initial of each part
-        parts[:-1] = [
-            "%s." % part[0] if len(part) > 2 and part[0].isalpha() else part
-            for part in parts[:-1]
-        ]
-        return " ".join(parts)
-
     def python_example_for(method, more_style_config={}):
         s = "m.%s(%s)" % (method['name'], ", ".join(
             [
@@ -103,11 +93,11 @@ def render(
         s, xform = inspect_html(v, max_width=max_width, max_seq_length=max_seq_length)
         return xform(s)
 
-    def curl_example_for(method):
+    def curl_example_for(method_name, example_args):
         def json_default(o):
-            if hasattr(o, '__json__'):
-                return o.__json__()
-            raise TypeError("Unserializable object {} of type {}".format(o, type(o)))
+            if not hasattr(o, '__json__'):
+                raise TypeError("Unserializable object {} of type {}".format(o, type(o)))
+            return o.__json__()
 
         def quoted_json_dumps(v):
             try:
@@ -118,12 +108,15 @@ def render(
                 return None
 
         return "curl %s" % " \\\n   ".join([
-            "http://%s/api/%s" % (host, method['name']),
+            "http://%s/api/%s" % (host, method_name),
             *[
                 "-F %s=%s" % (k, quoted_json_dumps(v))
-                for k, v in method['example args'].items()
+                for k, v in example_args.items()
             ],
         ])
+
+    def curl_example_for_method(method):
+        return curl_example_for(method['name'], method['example args'])
 
     def html_repr(v):
         s, xform = inspect_html(v, max_width=None, max_seq_length=None)
@@ -141,15 +134,25 @@ def render(
     def reference_fn(citation_refname):
         return references[citation_refname]
 
+    def demo_block_html(method_name, method_doc):
+        code = curl_example_for(
+                method_name,
+                _parse_example_args(method_doc['example args'], {}))
+
+        return """<div class="method-example">
+<div class="method-example-code">
+    <pre><code class="language-curl line-numbers">%s</code></pre>
+</div></div>""" % code
+
     # TODO(adamb) What about arxiv ids already within []_ ??
-    parsed = _parse_rst(overview or "", "<string>", 3, 'overview-',
-            citation_label_by_refname_fn, reference_fn)
+    parsed = _parse_rst(overview or "", "<string>", 2, 'overview-',
+            citation_label_by_refname_fn, reference_fn, demo_block_html)
 
     def refine_method(method):
         method = dict(method)
         parsed_overview = _parse_rst(method['overview'], "<string>", 3,
                 'method-%s-' % method['name'],
-                citation_label_by_refname_fn, reference_fn)
+                citation_label_by_refname_fn, reference_fn, demo_block_html)
         method['overview'] = parsed_overview['body']
         return method
 
@@ -200,10 +203,10 @@ def render(
             python_repr=python_repr,
             json_repr=json_repr,
             html_repr=html_repr,
+            example_method=[method for method in methods if method['name'] == 'topk'][0],
             python_example_for=python_example_for,
-            curl_example_for=curl_example_for,
+            curl_example_for=curl_example_for_method,
             extra_scripts=extra_scripts,
-            shorten_author_name=shorten_author_name,
             style_fragment=_read_style_fragment(),
             title=parsed['title'],
             subhead=parsed['subtitle'],
