@@ -22,7 +22,7 @@ def sha256_for_file(f, buf_size=65536):
 
     return size, dgst.hexdigest()
 
-environment_name = "tfi"
+environment_name = "pytorch"
 namespace = "default"
 environment = {
     "namespace": namespace,

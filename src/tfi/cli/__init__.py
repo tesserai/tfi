@@ -44,6 +44,11 @@ def resolve(leading_value, rest):
     else:
         resolution = _resolve_module(leading_value)
 
+    if 'model_fn_needed_params' not in resolution:
+        resolution['model_method_fn'] = None
+        resolution['model'] = None
+        return resolution
+
     empty = inspect.Parameter.empty
 
     p = argparse.ArgumentParser(prog=leading_value)

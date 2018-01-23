@@ -6,6 +6,7 @@ from collections import OrderedDict as _OrderedDict
 
 from tfi.parse.docstring import GoogleDocstring as _GoogleDocstring
 from tfi.parse.arxiv import discover_arxiv_ids as _discover_arxiv_ids
+from tfi.parse.python import parse_example_args as _parse_example_args
 from tfi.resolve.arxiv import ArxivBibtexRepo as _ArxivBibtexRepo
 from tfi.resolve.arxiv2bib import arxiv2bib as _arxiv2bib
 from tfi.resolve.git import git_authorship as _git_authorship
@@ -105,20 +106,7 @@ def documentation(model):
             authors = git['authors']
 
     def prep_python_method(method_name, method_doc):
-        # TODO(adamb) Confirm we can properly parse k as an id and v alone.
-        example_python_kw_src = ", ".join([
-            "%s=%s" % (name, "\n".join(doc))
-            for name, type, doc in method_doc['example args']
-        ])
-        example_args_src = """
-import tfi.data
-_ = dict(%s)
-""" % example_python_kw_src
-        g = {}
-        l = {'m': model}
-        exec(example_args_src, g, l)
-        example_args = l['_']
-
+        example_args = _parse_example_args(method_doc['example args'], {'m': model})
         example_result = {}
         try:
             example_result = getattr(model, method_name)(**example_args)

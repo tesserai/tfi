@@ -177,7 +177,7 @@ def render(
                 parent = parent.parent
             return True
         
-        soup = BeautifulSoup(html, "html5lib")
+        soup = BeautifulSoup(html, "html.parser")
         data = soup.findAll(text=True)
         return re.sub('\s+', ' ', " ".join(t.strip() for t in filter(visible, data)))
 

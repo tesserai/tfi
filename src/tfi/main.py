@@ -11,6 +11,8 @@ import inspect
 import os
 import os.path
 import sys
+import tempfile
+
 # import tensorflow as tf
 import tfi
 import tfi.pytorch
@@ -82,8 +84,6 @@ def run(argns, remaining_args):
 
             accept_mimetypes = {"image/png": _tfi_format_iterm2_imgcat, "text/plain": lambda x: x}
             result_val = _tfi_tensor_codec_encode(accept_mimetypes, result)
-
-            # result_val = tfi.data._encode(tensor, accept_mimetypes)
             if result_val is None:
                 result_val = result
             result_str = '%r\n' % (result_val, )
@@ -140,7 +140,7 @@ def run(argns, remaining_args):
         # tfi.saved_model.export(argns.export, model)
 
     if argns.publish:
-        from tfi.publish import _publish
+        from tfi.publish import publish as _publish
         if argns.specifier_source and not argns.specifier_via_python:
             with open(argns.specifier_source, 'rb') as f:
                 url = _publish(f)

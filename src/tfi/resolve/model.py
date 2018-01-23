@@ -100,7 +100,7 @@ def resolve_url(leading_value):
 
     found = False
     with urllib.request.urlopen(source) as f:
-        doc = BeautifulSoup(f, 'html5lib')
+        doc = BeautifulSoup(f, "html.parser")
         matching = doc.html.head.findAll('meta', {"name":'tesserai:snapshot'})
         for match in matching:
             if match.has_attr('content'):
