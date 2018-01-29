@@ -12,7 +12,7 @@ os.environ["SOURCE_DATE_EPOCH"] = '315532800'
 NAME = "tfi"
 PACKAGES = find_packages(where="src")
 META_PATH = os.path.join("src", NAME, "__init__.py")
-KEYWORDS = ["tensorflow", "savedmodel", "boilerplate"]
+KEYWORDS = ["tensorflow", "savedmodel", "boilerplate", "pytorch"]
 # List of all classifiers: https://pypi.python.org/pypi?%3Aaction=list_classifiers
 CLASSIFIERS = [
     "Development Status :: 3 - Alpha",
@@ -26,8 +26,27 @@ CLASSIFIERS = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 INSTALL_REQUIRES = [
-    "tensorflow>=1.3",
 ]
+EXTRAS_REQUIRE = {
+    "tensorflow": [
+        "tensorflow>=1.3",
+        "numpy",
+    ],
+    "pytorch": [
+        "pytorch",
+        "torchvision",
+    ],
+    "serve": [
+        "cloudpickle",
+        "requests",
+        "Flask",
+        "gunicorn",
+        "tinydb",
+        "yapf",
+        "docutils",
+        "beautifulsoup4",
+    ],
+}
 
 ###################################################################
 
@@ -77,4 +96,5 @@ if __name__ == "__main__":
         zip_safe=False,
         classifiers=CLASSIFIERS,
         install_requires=INSTALL_REQUIRES,
+        extras_require=EXTRAS_REQUIRE,
     )

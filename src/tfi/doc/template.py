@@ -1,7 +1,3 @@
-# from pygments import highlight
-# from pygments.formatters import HtmlFormatter
-# from pygments.lexers import PythonLexer, BashLexer
-
 from jinja2 import Template as JinjaTemplate
 
 from tfi.format.html.bibtex import citation_bibliography_html

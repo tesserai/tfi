@@ -1,5 +1,5 @@
 
-__version__ = "0.5"
+__version__ = "0.6"
 
 __title__ = "tfi"
 __description__ = "Use any TensorFlow model in a single line of code"
