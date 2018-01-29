@@ -5,6 +5,7 @@ import mimetypes
 
 from tfi.tensor.codec import ShapeMismatchException as _ShapeMismatchException
 
+from tfi.base import _recursive_transform
 import tensorflow as tf
 
 _DECODERS = {}
@@ -123,19 +124,32 @@ as_tensor = _as_tensor_adapter.as_tensor
 import tensorflow as tf
 import numpy as np
 
+from tfi.data import _Source
+
 from tfi.tensor.codec import register_encoder as _register_encoder
 from tfi.tensor.codec import register_tensor_spec as _register_tensor_spec
+
+
+@_register_tensor_spec(_Source)
+def _file_source_tensor_spec(fp):
+    tensor = as_tensor(fp, None, None)
+    return tensor, tensor.shape, tensor.dtype, np.reshape
 
 @_register_tensor_spec(np.ndarray)
 def _ndarray_spec(tensor):
     return tensor, tensor.shape, tensor.dtype, np.reshape
 
+def _graph_for_tensor(tensor):
+    if isinstance(tensor, tf.Tensor):
+        return tensor.graph
+    return tf.Graph()
+
 @_register_encoder(
         ["image/png"],
         [tf.uint8],
-        [(None, None, 1), (None, None, 2), (None, None, 3), (None, None, 4)])
+        [(None, None, None), (None, None, 1), (None, None, 2), (None, None, 3), (None, None, 4)])
 def _png_encode(tensor):
-    with tf.Graph().as_default() as g:
+    with _graph_for_tensor(tensor).as_default() as g:
         with tf.Session(graph=g):
             # TODO(adamb) Use placeholder and a cached graph, for speed.
             encoded = tf.image.encode_png(tensor)
@@ -144,10 +158,24 @@ def _png_encode(tensor):
 @_register_encoder(
         ["image/png"],
         [tf.float32],
-        [(None, None, 1), (None, None, 2), (None, None, 3), (None, None, 4)])
+        [(None, None, None), (None, None, 1), (None, None, 2), (None, None, 3), (None, None, 4)])
 def _png_float_encode(tensor):
-    with tf.Graph().as_default() as g:
+    with _graph_for_tensor(tensor).as_default() as g:
         with tf.Session(graph=g):
             # TODO(adamb) Use placeholder and a cached graph, for speed.
             encoded = tf.image.encode_png(tf.cast(tensor * 255.0, tf.uint8))
             return encoded.eval()
+
+@_register_encoder(
+        ["python/jsonable"],
+        [np.float32],
+        [None])
+def _jsonable_encode_ndarray(tensor):
+    return tensor.tolist()
+
+@_register_encoder(
+        ["python/jsonable"],
+        [object],
+        [(None)])
+def _jsonable_encode(tensor):
+    return [o.decode() if isinstance(o, bytes) else o for o in tensor]

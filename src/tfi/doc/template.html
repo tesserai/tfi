@@ -279,7 +279,6 @@
 
 {% macro render_args(klass, args, examples={}) -%}
   <div class="method-list {{klass}}">
-    <h4 class="method-list-title"></h4>
     <ul class="method-list-group">
       {% for name, kind, description in args | sort %}
       <li class="method-list-item {% if name in examples %}has-example{% endif %}">
@@ -322,9 +321,6 @@
     <!-- <meta property="og:site_name" content="Tesserai"/> -->
     <!-- <meta property="og:url" content="http://example.com/canonical-url" /> -->
 
-    <style>
-    {{style_fragment}}
-    </style>
     <link rel="stylesheet" href="static/primer-tooltip.css" />
     <link rel="stylesheet" href="static/prism_light.css" />
     <link rel="stylesheet" href="static/json-formatter.css" />
@@ -395,7 +391,7 @@
     <section>
       <h2>Getting Started</h2>
       <p>
-        You can this API remotely without installing any software. You can also run this API locally without internet access.
+        You can use this API without installing any software. You can also run this API locally without internet access.
         Local access to the API is possible from both the command line and from within Python.
         Use the command below to get setup and confirm the API is working for you.
       </p>

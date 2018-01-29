@@ -15,7 +15,6 @@ from flask import Flask, request, jsonify, send_file, send_from_directory, abort
 from werkzeug.wsgi import pop_path_info, peek_path_info
 
 from tfi import data as tfi_data
-from tfi import pytorch as tfi_pytorch
 from tfi.base import _recursive_transform
 from tfi.doc import documentation, render
 
@@ -116,7 +115,7 @@ def make_app(model, model_file_fn, extra_scripts=""):
     return app
 
 class make_deferred_app(object):
-    def __init__(self, extra_scripts=""):
+    def __init__(self, model_class_from_path_fn, extra_scripts=""):
         # A default, empty model_app
         self._model_app = Flask(__name__)
 
@@ -128,7 +127,7 @@ class make_deferred_app(object):
         @specialize_app.route('/specialize', methods=['POST'])
         def specialize():
             self._model_app = make_app(
-                    tfi_pytorch.as_class(codepath),
+                    model_class_from_path_fn(codepath),
                     model_file_fn=lambda: codepath,
                     extra_scripts=extra_scripts)
             return ""

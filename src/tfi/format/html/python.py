@@ -61,9 +61,10 @@ def inspect(o, max_width=None, max_seq_length=None):
 
     accept_mimetypes = {"image/png": genpng, "text/plain": text_plain}
 
-    val = _recursive_transform(o, lambda x: encode(accept_mimetypes, x))
-    if val is not None:
-        o = val
+    def xform_or_none(v):
+        t = encode(accept_mimetypes, v)
+        return v if t is None else t
+    o = _recursive_transform(o, xform_or_none)
 
     if max_width is None:
         max_width = 79

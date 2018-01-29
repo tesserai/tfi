@@ -60,6 +60,7 @@ def _remote_git_repo_impl(url_prefixes):
 @_remote_git_repo_impl(["https://github.com/"])
 class GitHubRepo(object):
     def __init__(self, url):
+        url = url.strip("/")
         self._url = url
         if url.endswith(".git"):
             url = url[:-4]

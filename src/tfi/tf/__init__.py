@@ -85,10 +85,13 @@ def _make_method(signature_def, result_class_name):
         # TODO(adamb) This might append to the default graph. These appends
         #     should be cached and idempotent. The added nodes should be
         #     reused if possible.
-        return as_tensor(
-            value,
-            tf.TensorShape(signature_def_input.tensor_shape).as_list(),
-            tf.as_dtype(signature_def_input.dtype))
+        v = as_tensor(
+                value,
+                tf.TensorShape(signature_def_input.tensor_shape).as_list(),
+                tf.as_dtype(signature_def_input.dtype))
+        if v is None:
+            return v
+        return tf.get_session_handle(v)
 
     def _impl(self, **kwargs):
         print("_impl running")

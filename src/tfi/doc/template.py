@@ -31,21 +31,6 @@ def _read_template_file(subpath):
     with open(path, encoding="utf-8") as f:
         return f.read()
 
-def _read_style_fragment():
-    _style_fragment = ""
-    # hf = HtmlFormatter(style='paraiso-dark')
-    # _style_fragment += hf.get_style_defs('.language-source')
-
-    # _style_file = __file__[:-2] + "css"
-    # if _style_file.endswith("__init__.css"):
-    #     _style_file = _style_file.replace("__init__.css", __name__.split('.')[-1] + '.css')
-    # with open(_style_file, encoding="utf-8") as f:
-    #     _style_fragment += f.read()
-    return _style_fragment
-
-# ['default', 'emacs', 'friendly', 'colorful', 'autumn', 'murphy', 'manni', 'monokai', 'perldoc', 'pastie', 'borland', 'trac', 'native', 'fruity', 'bw',
-# 'vim', 'vs', 'tango', 'rrt', 'xcode', 'igor', 'paraiso-light', 'paraiso-dark', 'lovelace', 'algol', 'algol_nu', 'arduino', 'rainbow_dash', 'abap']
-
 def render(
         source,
         authors,
@@ -83,11 +68,15 @@ def render(
             # Use python/jsonable so we to a recursive transform before jsonification.
             "python/jsonable": lambda x: x,
         }
-        r = _recursive_transform(v, lambda o: tfi.tensor.codec.encode(accept_mimetypes, o))
+
+        def xform_or_none(o):
+            t = tfi.tensor.codec.encode(accept_mimetypes, o)
+            return o if t is None else t
+
+        r = _recursive_transform(v, xform_or_none)
         if r is not None:
             v = r
 
-        return json.dumps(v, sort_keys=True, indent=2)
 
     def python_repr(v, max_width=None, max_seq_length=None):
         s, xform = inspect_html(v, max_width=max_width, max_seq_length=max_seq_length)
@@ -188,7 +177,11 @@ def render(
 
     body_sections = []
     if parsed['body']:
-        body_sections.append({'title': 'overview', 'body': parsed['body']})
+        body_sections.append({
+            'title': 'overview',
+            'id': 'overview',
+            'body': """<section id="%s"><h2>%s</h2>%s</section>""" % ('overview', 'Overview', parsed['body']),
+        })
 
     appendix_section_ids = ['overview-dataset']
     appendix_sections = []
@@ -203,11 +196,9 @@ def render(
             python_repr=python_repr,
             json_repr=json_repr,
             html_repr=html_repr,
-            example_method=[method for method in methods if method['name'] == 'topk'][0],
             python_example_for=python_example_for,
             curl_example_for=curl_example_for_method,
             extra_scripts=extra_scripts,
-            style_fragment=_read_style_fragment(),
             title=parsed['title'],
             subhead=parsed['subtitle'],
             description=description,

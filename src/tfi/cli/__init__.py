@@ -29,16 +29,16 @@ def _resolve_needed_params(method, have_kwargs=None):
 
     return needed
 
-def resolve(leading_value, rest):
+def resolve(model_class_from_path_fn, leading_value, rest):
     if leading_value is None:
         resolution = {
             'source': "",
             'loaded': None,
         }
     elif leading_value.startswith('@'):
-        resolution = _resolve_exported(leading_value[1:])
+        resolution = _resolve_exported(model_class_from_path_fn, leading_value[1:])
     elif leading_value.startswith('http://') or leading_value.startswith('https://'):
-        resolution = _resolve_url(leading_value)
+        resolution = _resolve_url(model_class_from_path_fn, leading_value)
     elif '.py:' in leading_value:
         resolution = _resolve_python_source(leading_value)
     else:

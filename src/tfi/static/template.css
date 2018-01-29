@@ -460,6 +460,7 @@ nav select:focus {
   border: 1px solid #e6e6e6;
 }
 .method-list-item {
+  clear: both;
   border-bottom: 1px solid rgba(0, 0, 0, 0.04);
 }
 

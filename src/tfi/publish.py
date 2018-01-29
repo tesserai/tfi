@@ -4,6 +4,7 @@ import json
 import requests
 import tempfile
 import uuid
+import os
 
 from tqdm import tqdm
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
@@ -22,14 +23,9 @@ def sha256_for_file(f, buf_size=65536):
 
     return size, dgst.hexdigest()
 
-environment_name = "pytorch"
 namespace = "default"
-environment = {
-    "namespace": namespace,
-    "name": environment_name,
-}
 
-fission_url = "http://35.202.47.203"
+fission_url = os.environ["FISSION_URL"]
 def post(rel_url, data):
     response = requests.post(
             "%s%s" % (fission_url, rel_url),
@@ -63,7 +59,7 @@ def format_bytes(count):
     count = count.to_integral() if count == count.to_integral() else round(count.normalize(), 2)
     return "%s %s" % (count, labels[label_ix])
 
-def lazily_define_package(file):
+def lazily_define_package(environment, file):
     filesize, archive_sha256 = sha256_for_file(file)
     base_archive_url = "%s/proxy/storage/v1/archive" % fission_url
 
@@ -122,8 +118,8 @@ def lazily_define_package(file):
     }
     return archive_sha256, post("/v2/packages", package)[1]
 
-def lazily_define_function(f):
-    archive_sha256, package_ref = lazily_define_package(f)
+def lazily_define_function(environment, f):
+    archive_sha256, package_ref = lazily_define_package(environment, f)
     print("Registering ...", end='', flush=True)
     function_name = archive_sha256[:8]
     status_code, response = get("/v2/functions/%s" % function_name)
@@ -178,8 +174,12 @@ def lazily_define_trigger2(function_name, http_method, host, relativeurl):
         return
     raise Exception(r.text)
 
-def publish(f):
-    function_name = lazily_define_function(f)
+def publish(environment_name, f):
+    environment = {
+        "namespace": namespace,
+        "name": environment_name,
+    }
+    function_name = lazily_define_function(environment, f)
     host = "%s.tfi.gcp.tesserai.com" % function_name
     lazily_define_trigger2(function_name, "POST", host, "/{path-info:.*}")
     lazily_define_trigger2(function_name, "GET", host, "/{path-info:.*}")

@@ -59,14 +59,13 @@ def _reify(resolution):
     
     return resolution
 
-def resolve_exported(leading_value):
-    # loaded = tfi.saved_model.as_class(leading_value[1:])
+def resolve_exported(model_class_from_path_fn, leading_value):
     return _reify({
         'source': os.path.abspath(leading_value),
-        'loaded': tfi.pytorch.as_class(source),
+        'loaded': model_class_from_path_fn(leading_value),
     })
 
-def resolve_url(leading_value):
+def resolve_url(model_class_from_path_fn, leading_value):
     # Load exported model via http(s)
     pre_initargs, *init_rest = leading_value.split("(", 1)
 
@@ -131,7 +130,7 @@ def resolve_url(leading_value):
             return _reify({
                 'source': source,
                 'classname': classname,
-                'loaded': tfi.pytorch.as_class(f.name),
+                'loaded': model_class_from_path_fn(f.name),
                 'module': module,
                 'via_python': via_python,
             })

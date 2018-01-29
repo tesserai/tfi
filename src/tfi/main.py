@@ -13,9 +13,7 @@ import os.path
 import sys
 import tempfile
 
-# import tensorflow as tf
 import tfi
-import tfi.pytorch
 
 from tfi.cli import resolve as _resolve_model
 from tfi.tensor.codec import encode as _tfi_tensor_codec_encode
@@ -23,6 +21,49 @@ from tfi.format.iterm2 import imgcat as _tfi_format_iterm2_imgcat
 
 from collections import OrderedDict
 from functools import partial
+
+def _detect_model_object_kind(model):
+    klass = model if isinstance(model, type) else type(model)
+    for c in klass.mro():
+        if c.__name__ != "Base":
+            continue
+        if c.__module__ == "tfi.pytorch":
+            return "pytorch"
+        if c.__module__ == "tfi.tf":
+            return "tensorflow"
+    raise Exception("Unknown model type %s" % klass)
+
+def _detect_model_file_kind(file):
+    if os.path.isdir(source):
+        # It's a SavedModel!
+        return "tensorflow"
+
+    # Assume it's a PyTorch model!
+    return "pytorch"
+
+def _model_module_for_kind(kind):
+    if kind == "pytorch":
+        import tfi.pytorch
+        return tfi.pytorch
+    if kind == "tensorflow":
+        import tfi.tf
+        return tfi.tf
+    raise Exception("Can't detect model module %s" % model)
+
+def _model_class_from_path_fn(source):
+    kind = _detect_model_file_kind(source)
+    mod = _model_module_for_kind(kind)
+    return _detect_model_file_module(source).as_class(source)
+
+def _model_export(path, model):
+    kind = _detect_model_object_kind(model)
+    mod = _model_module_for_kind(kind)
+    return mod.export(path, model)
+
+def _model_publish(f):
+    from tfi.publish import publish as _publish
+    kind = _detect_model_file_kind(f)
+    _publish(kind, f)
 
 class ModelSpecifier(argparse.Action):
     def __init__(self,
@@ -45,7 +86,7 @@ class ModelSpecifier(argparse.Action):
             leading_value = None
             rest = []
 
-        resolution  = _resolve_model(leading_value, rest)
+        resolution  = _resolve_model(_model_class_from_path_fn, leading_value, rest)
 
         setattr(namespace, self.dest, resolution['model'])
         setattr(namespace, "%s_method_fn" % self.dest, resolution['model_method_fn'])
@@ -104,7 +145,10 @@ def run(argns, remaining_args):
         port = int(port)
         if model is None:
             from tfi.serve import run_deferred as serve_deferred
-            serve_deferred(host=host, port=port, extra_scripts=segment_js)
+            serve_deferred(
+                    host=host, port=port,
+                    model_class_from_path_fn=argns.model_class_from_path_fn,
+                    extra_scripts=segment_js)
         else:
             from tfi.serve import run as serve
             def model_file_fn():
@@ -112,7 +156,7 @@ def run(argns, remaining_args):
                     return argns.specifier_source
                 with tempfile.NamedTemporaryFile(mode='rb', delete=False) as f:
                     print("Exporting ...", end='', flush=True)
-                    tfi.pytorch.export(f.name, model)
+                    _model_export(f.name, model)
                     print(" done", flush=True)
                     return f.name
             serve(model, host=host, port=port, extra_scripts=segment_js, model_file_fn=model_file_fn)
@@ -136,21 +180,23 @@ def run(argns, remaining_args):
             import shutil
             shutil.copyfile(argns.specifier_source, argns.export)
         else:
-            tfi.pytorch.export(argns.export, model)
-        # tfi.saved_model.export(argns.export, model)
+            _model_export(argns.export, model)
 
     if argns.publish:
-        from tfi.publish import publish as _publish
         if argns.specifier_source and not argns.specifier_via_python:
             with open(argns.specifier_source, 'rb') as f:
-                url = _publish(f)
+                # TODO(adamb) Should actually autodetect which environment to use.
+                url = _model_publish(f)
         else:
             with tempfile.NamedTemporaryFile(mode='rb') as f:
+                # TODO(adamb) Should actually autodetect which environment to use.
                 print("Exporting ...", end='', flush=True)
-                tfi.pytorch.export(f.name, model)
+                _model_export(f.name, model)
                 print(" done", flush=True)
-                url = _publish(f)
+                url = _model_publish(f)
         print(url)
 
 if __name__ == '__main__':
-    run(*parser.parse_known_args(sys.argv[1:]))
+    argns, remaining_args = parser.parse_known_args(sys.argv[1:])
+    argns.model_class_from_path_fn = _model_class_from_path_fn
+    run(argns, remaining_args)
