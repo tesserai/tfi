@@ -145,7 +145,11 @@ def _from_tensor(tensor, shape_dims, dtype, reshape_fn, mappings):
         return None
 
     # Descending order means we'll consider highest score first.
-    matches.sort(reverse=True)
+    def sortkey(match):
+        (score, nmatching), needs_shape_dims, xform = match
+        return (score, nmatching, -1 if needs_shape_dims is None else len(needs_shape_dims))
+
+    matches.sort(key=sortkey, reverse=True)
     (score, nmatching), needs_shape_dims, xform = matches[0]
     if score == 0:
         return None

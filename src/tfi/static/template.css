@@ -596,7 +596,7 @@ nav select:focus {
   padding-bottom: 0;
 }
 
-#appendix ul {
+#appendix ul, #appendix ol {
   margin: 0;
 }
 
@@ -614,7 +614,7 @@ nav select:focus {
 }
 
 #appendix .method-list {
-  margin: 1.2rem 0 0;
+  margin: 0;
 }
 
 #appendix .method-list-group {

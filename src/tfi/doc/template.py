@@ -136,6 +136,8 @@ def render(
     # TODO(adamb) What about arxiv ids already within []_ ??
     parsed = _parse_rst(overview or "", "<string>", 2, 'overview-',
             citation_label_by_refname_fn, reference_fn, demo_block_html)
+    if not parsed['title']:
+        parsed['title'] = title
 
     def refine_method(method):
         method = dict(method)
@@ -177,10 +179,16 @@ def render(
 
     body_sections = []
     if parsed['body']:
+        forged_body_title = 'Overview'
+        forged_body_id = 'overview'
         body_sections.append({
-            'title': 'overview',
-            'id': 'overview',
-            'body': """<section id="%s"><h2>%s</h2>%s</section>""" % ('overview', 'Overview', parsed['body']),
+            'title': forged_body_title,
+            'id': forged_body_id,
+            'body': """<section id="%s"><h2>%s</h2>%s</section>""" % (
+                forged_body_id,
+                forged_body_title,
+                parsed['body']
+            ),
         })
 
     appendix_section_ids = ['overview-dataset']
