@@ -26,10 +26,11 @@ CLASSIFIERS = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 INSTALL_REQUIRES = [
+    "ptpython",
 ]
 EXTRAS_REQUIRE = {
     "tensorflow": [
-        "tensorflow>=1.3",
+        "tensorflow>=1.6.0rc1",
         "numpy",
     ],
     "pytorch": [
@@ -45,6 +46,11 @@ EXTRAS_REQUIRE = {
         "yapf",
         "docutils",
         "beautifulsoup4",
+    ],
+}
+ENTRY_POINTS = {
+    'console_scripts': [
+        'tfi = tfi.main:main',
     ],
 }
 
@@ -91,6 +97,7 @@ if __name__ == "__main__":
         maintainer_email=find_meta("email"),
         keywords=KEYWORDS,
         long_description=read("README.rst"),
+        entry_points=ENTRY_POINTS,
         packages=PACKAGES,
         package_dir={"": "src"},
         zip_safe=False,

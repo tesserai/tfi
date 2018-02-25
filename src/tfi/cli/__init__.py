@@ -4,6 +4,7 @@ import inspect
 from collections import OrderedDict
 from functools import partial
 
+from tfi.base import _GetAttrAccumulator as _GetAttrAccumulator
 from tfi.data import file as _tfi_data_file
 from tfi.resolve.model import resolve_exported as _resolve_exported
 from tfi.resolve.model import resolve_url as _resolve_url
@@ -82,6 +83,9 @@ def resolve(model_class_from_path_fn, leading_value, rest):
         needed_params = _resolve_needed_params(member)
         ns_keys_to_kw = {}
         for name, param in needed_params.items():
+            # HACK(adamb) Should actually properly process theses?!?
+            if isinstance(param.annotation, _GetAttrAccumulator):
+                continue
             dest = "_%s.%s" % (membername, name)
             ns_keys_to_kw[dest] = name
             sp.add_argument(

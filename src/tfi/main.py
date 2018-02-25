@@ -34,7 +34,7 @@ def _detect_model_object_kind(model):
     raise Exception("Unknown model type %s" % klass)
 
 def _detect_model_file_kind(file):
-    if os.path.isdir(source):
+    if os.path.isdir(file):
         # It's a SavedModel!
         return "tensorflow"
 
@@ -53,7 +53,7 @@ def _model_module_for_kind(kind):
 def _model_class_from_path_fn(source):
     kind = _detect_model_file_kind(source)
     mod = _model_module_for_kind(kind)
-    return _detect_model_file_module(source).as_class(source)
+    return mod.as_class(source)
 
 def _model_export(path, model):
     kind = _detect_model_object_kind(model)
@@ -196,7 +196,10 @@ def run(argns, remaining_args):
                 url = _model_publish(f)
         print(url)
 
-if __name__ == '__main__':
+def main():
     argns, remaining_args = parser.parse_known_args(sys.argv[1:])
     argns.model_class_from_path_fn = _model_class_from_path_fn
     run(argns, remaining_args)
+
+if __name__ == '__main__':
+    main()
