@@ -106,7 +106,9 @@ def documentation(model):
             authors = git['authors']
 
     def prep_python_method(method_name, method_doc):
-        example_args = _parse_example_args(method_doc['example args'], {'m': model})
+        example_args = {}
+        if 'example args' in method_doc:
+            example_args = _parse_example_args(method_doc['example args'], {'m': model})
         example_result = {}
         try:
             example_result = getattr(model, method_name)(**example_args)
