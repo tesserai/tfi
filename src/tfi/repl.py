@@ -111,8 +111,12 @@ def run(globals=None, locals=None, history_filename=None, model=None):
     g = dict(globals)
     # g['tfi'] = tfi
     if model is not None:
+        g['m'] = model
+        print("Added model to environment as m")
         for n, m in inspect.getmembers(model, predicate=inspect.ismethod):
-            g[n] = m
+            if n.startswith('_'):
+                continue
+            print("m.%s(%s)" % (n, ", ".join(inspect.signature(m).parameters.keys())))
     embed(g, locals,
           configure=_configure_repl,
           history_filename=history_filename)

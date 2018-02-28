@@ -68,7 +68,7 @@ def _resolve_instance_method_tensors(instance, fn):
 
     return doc, input_tensors, output_tensors
 
-def _make_method(signature_def, result_class_name):
+def _make_method(signature_def):
     # Sort to preserve order because we need to go from value to key later.
     output_tensor_keys_sorted = sorted(signature_def.outputs.keys())
     output_tensor_names_sorted = [
@@ -76,7 +76,6 @@ def _make_method(signature_def, result_class_name):
         for tensor_key in output_tensor_keys_sorted
     ]
 
-    result_class = namedtuple(result_class_name, output_tensor_keys_sorted)
     input_tensor_names_sorted = sorted(signature_def.inputs.keys())
 
     def session_handle_for(value, signature_def_input):
@@ -94,8 +93,6 @@ def _make_method(signature_def, result_class_name):
         return tf.get_session_handle(v)
 
     def _impl(self, **kwargs):
-        print("_impl running")
-
         feed_dict = {}
         session = self.__tfi_session__
         with session.graph.as_default():
@@ -104,9 +101,9 @@ def _make_method(signature_def, result_class_name):
             for key in input_tensor_names_sorted:
                 input = signature_def.inputs[key]
                 value = kwargs[key]
-                print("finding session_handle_for", value, input)
+                # print("finding session_handle_for", key, value, input)
                 sh = session_handle_for(value, input)
-                print("found session_handle_for", sh)
+                # print("found session_handle_for", sh)
                 if sh is None:
                     feed_dict[input.name] = value
                 else:
@@ -116,11 +113,9 @@ def _make_method(signature_def, result_class_name):
             for key, fh in zip(handle_keys, session.run(handle_in)):
                 feed_dict[key] = fh
 
-            print("about to run!", output_tensor_names_sorted, feed_dict)
             result = session.run(
                 output_tensor_names_sorted,
                 feed_dict=feed_dict)
-            print("ran and got result!")
 
         return dict(zip(output_tensor_keys_sorted, result))
 
@@ -137,6 +132,36 @@ def _make_method(signature_def, result_class_name):
         if k in sigdef_inputs
     }
     return impl
+
+def _infer_signature_defs(class_dict, instance):
+    signature_defs = OrderedDict()
+    signature_def_docs = OrderedDict()
+
+    def _tensor_infos_dict(tensor_dict):
+        return OrderedDict([
+            (name, tf.saved_model.utils.build_tensor_info(tensor))
+            for name, tensor in tensor_dict.items()
+        ])
+
+    for method_name, method in class_dict.items():
+        if method_name.startswith('_'):
+            continue
+        
+        if not inspect.isfunction(method):
+            continue
+
+        # HACK(adamb) Bind as method so we can eliminate the initial self parameter.
+        method = types.MethodType(method, instance)
+
+        doc, input_tensors, output_tensors = _resolve_instance_method_tensors(instance, method)
+
+        signature_def_docs[method_name] = doc
+        signature_defs[method_name] = tf.saved_model.signature_def_utils.build_signature_def(
+            inputs=_tensor_infos_dict(input_tensors),
+            outputs=_tensor_infos_dict(output_tensors),
+            method_name=method.__tfi_method_name__ if hasattr(method, '__tfi_method_name__') else None)
+    
+    return signature_defs, signature_def_docs
 
 class Meta(type):
     @staticmethod
@@ -177,37 +202,14 @@ class Meta(type):
                     with self.__tfi_session__.as_default():
                         init(self, *a, **k)
 
-
                 # Once init has executed, we can bind proper methods too!
                 if not hasattr(self, '__tfi_signature_defs__'):
-                    self.__tfi_signature_defs__ = OrderedDict()
-                    self.__tfi_signature_def_docs__ = OrderedDict()
-
-                    def _tensor_infos_dict(tensor_dict):
-                        return OrderedDict([
-                            (name, tf.saved_model.utils.build_tensor_info(tensor))
-                            for name, tensor in tensor_dict.items()
-                        ])
-
-                    for method_name, method in inspect.getmembers(self, predicate=inspect.ismethod):
-                        if method_name.startswith('_'):
-                            continue
-
-                        doc, input_tensors, output_tensors = _resolve_instance_method_tensors(self, method)
-
-                        self.__tfi_signature_def_docs__[method_name] = doc
-                        self.__tfi_signature_defs__[method_name] = tf.saved_model.signature_def_utils.build_signature_def(
-                            inputs=_tensor_infos_dict(input_tensors),
-                            outputs=_tensor_infos_dict(output_tensors),
-                            method_name=method.__tfi_method_name__ if hasattr(method, '__tfi_method_name__') else None)
+                    self.__tfi_signature_defs__, self.__tfi_signature_def_docs__ = _infer_signature_defs(d, self)
 
                 for method_name, sigdef in self.__tfi_signature_defs__.items():
-                    result_class_name = '%s__%s__Result' % (classname, method_name)
                     setattr(self,
                             method_name,
-                            types.MethodType(
-                                    _make_method(sigdef, result_class_name),
-                                    self))
+                            types.MethodType(_make_method(sigdef), self))
             if hasattr(init, '__doc__'):
                 wrapped_init.__doc__ = init.__doc__
             d['__init__'] = wrapped_init
@@ -234,7 +236,48 @@ class Meta(type):
         return d
 
 class Base(object, metaclass=Meta):
-    pass
+    def __tfi_refresh__(self):
+        if not hasattr(self, '__tfi_hyperparameters__'):
+            return
+
+        previous_session = self.__tfi_session__
+        with previous_session.graph.as_default():
+            previous_vars = {
+                *tf.global_variables(),
+                *tf.local_variables(),
+                *tf.model_variables(),
+            }
+            uninit_op = tf.report_uninitialized_variables(list(previous_vars))
+            uninit_op.mark_used()
+            uninit_var_names = set(uninit_op.eval(session=previous_session))
+            init_vars = [var for var in previous_vars if var.name[:-2].encode('utf-8') not in uninit_var_names]
+            previous_saved_prefix = None
+            if init_vars:
+                previous_saver = tf.train.Saver(var_list=init_vars)
+                previous_saved_prefix = previous_saver.save(previous_session, "/tmp/tf-saving")
+                print("previous_saved_prefix", previous_saved_prefix)
+
+        delattr(self, '__tfi_signature_defs__')
+        delattr(self, '__tfi_signature_def_docs__')
+        init_kw = {
+            name: val
+            for (name, _, val, _) in self.__tfi_hyperparameters__
+        }
+        self.__init__(**init_kw)
+
+        # TODO(adamb) Need to checkpoint all variables in previous_session and
+        #     load them into the current one.
+        if previous_saved_prefix:
+            with self.__tfi_session__.graph.as_default():
+                latest_vars = {
+                    *tf.global_variables(),
+                    *tf.local_variables(),
+                    *tf.model_variables(),
+                }
+                print("latest_vars", latest_vars)
+                if latest_vars:
+                    latest_saver = tf.train.Saver()
+                    latest_saver.restore(self.__tfi_session__, previous_saved_prefix)
 
 def as_class(saved_model_dir, tag_set=tf.saved_model.tag_constants.SERVING):
     from tensorflow.contrib.saved_model.python.saved_model import reader

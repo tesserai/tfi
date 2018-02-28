@@ -1,4 +1,5 @@
 import ast
+import hashlib
 import inspect
 import os.path
 
@@ -30,12 +31,15 @@ def _parse_python_str_constants(source):
 
 def _reify(resolution):
     init_rest = resolution.get('init_rest', [])
-    loaded = resolution.get('loaded', None)
+    loaded_fn = resolution.get('loaded_fn', None)
 
     init = {}
     if init_rest:
         init = eval("dict(%s" % init_rest[0])
 
+    loaded = loaded_fn()
+    is_loaded_a_class = False
+    
     if callable(loaded):
         sig = inspect.signature(loaded)
         needed_params = OrderedDict(sig.parameters.items())
@@ -45,6 +49,7 @@ def _reify(resolution):
         members = []
         if isinstance(loaded, type):
             members = inspect.getmembers(loaded, inspect.isfunction)
+            is_loaded_a_class = True
         model_fn = partial(loaded, **init)
     else:
         members = inspect.getmembers(loaded, inspect.ismethod)
@@ -53,16 +58,38 @@ def _reify(resolution):
 
     members = [(k, v) for (k, v) in members if not k.startswith('_')]
 
+    if resolution['can_refresh'] and is_loaded_a_class:
+        models = []
+        orig_model_fn = model_fn
+        def wrapped_model_fn(*a, **kw):
+            model = orig_model_fn(*a, **kw)
+            # TODO(adamb) Should actually use weak references to avoid a memory leak!
+            models.append(model)
+            return model
+        model_fn = wrapped_model_fn
+
+        def refresh_model():
+            reloaded = loaded_fn()
+            for model in models:
+                model.__class__ = reloaded
+                print("Replacing __class__", model, id(reloaded), reloaded)
+                if hasattr(model, '__tfi_refresh__'):
+                    model.__tfi_refresh__()
+
+        resolution['refresh_fn'] = refresh_model
+
     resolution['model_fn_needed_params'] = needed_params
     resolution['model_members'] = members
     resolution['model_fn'] = model_fn
+
     
     return resolution
 
 def resolve_exported(model_class_from_path_fn, leading_value):
     return _reify({
         'source': os.path.abspath(leading_value),
-        'loaded': model_class_from_path_fn(leading_value),
+        'loaded_fn': lambda: model_class_from_path_fn(leading_value),
+        'can_refresh': False,
     })
 
 def resolve_url(model_class_from_path_fn, leading_value):
@@ -82,10 +109,11 @@ def resolve_url(model_class_from_path_fn, leading_value):
             return _reify({
                 'source': source,
                 'classname': classname,
-                'module': module,
-                'loaded': getattr(module, classname),
+                'module_fn': lambda: module,
+                'loaded_fn': lambda: getattr(module, classname),
                 'via_python': True,
                 'init_rest': init_rest,
+                'can_refresh': False,
             })
 
     source = pre_initargs
@@ -130,9 +158,10 @@ def resolve_url(model_class_from_path_fn, leading_value):
             return _reify({
                 'source': source,
                 'classname': classname,
-                'loaded': model_class_from_path_fn(f.name),
-                'module': module,
+                'loaded_fn': lambda: model_class_from_path_fn(f.name),
+                'module_fn': lambda: module,
                 'via_python': via_python,
+                'can_refresh': False,
             })
 
 def resolve_python_source(leading_value):
@@ -142,19 +171,28 @@ def resolve_python_source(leading_value):
     module_name = source.replace('/', '.')
     source = os.path.abspath(source + ".py")
 
-    with open(source) as f:
-        constants = _parse_python_str_constants(f.read())
-        if '__tfi_conda_environment_yaml__' in constants:
-            print("Found __tfi_conda_environment_yaml__.")
+    def module():
+        with open(source) as f:
+            constants = _parse_python_str_constants(f.read())
+            if '__tfi_conda_environment_yaml__' in constants:
+                print("Found __tfi_conda_environment_yaml__.")
 
-    module = imp.load_source(module_name, source)
+        return imp.load_source(module_name, source)
+
+    with open(source, 'rb') as f:
+        m = hashlib.sha1()
+        m.update(f.read())
+        sha1hex = m.digest()
+
     return _reify({
         'source': source,
+        'source_sha1hex': sha1hex,
         'classname': classname,
-        'module': module,
-        'loaded': getattr(module, classname),
+        'module_fn': module,
+        'loaded_fn': lambda: getattr(module(), classname),
         'via_python': True,
         'init_rest': init_rest,
+        'can_refresh': True,
     })
 
 def resolve_module(leading_value):
@@ -162,12 +200,14 @@ def resolve_module(leading_value):
     pre_initargs, *init_rest = leading_value.split("(", 1)
     *module_fragments, classname = pre_initargs.split(".")
     module_name = ".".join(module_fragments)
-    module = importlib.import_module(module_name)
+    def module():
+        return importlib.import_module(module_name)
     return _reify({
         'source': source,
         'classname': classname,
-        'loaded': getattr(module, classname),
-        'module': module,
+        'loaded_fn': lambda: getattr(module(), classname),
+        'module_fn': module,
         'via_python': True,
         'init_rest': init_rest,
+        'can_refresh': True,
     })

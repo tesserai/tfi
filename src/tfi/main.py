@@ -89,8 +89,11 @@ class ModelSpecifier(argparse.Action):
         resolution  = _resolve_model(_model_class_from_path_fn, leading_value, rest)
 
         setattr(namespace, self.dest, resolution['model'])
+        setattr(namespace, "%s_can_refresh" % self.dest, resolution['can_refresh'])
+        setattr(namespace, "%s_refresh_fn" % self.dest, resolution.get('refresh_fn', None))
         setattr(namespace, "%s_method_fn" % self.dest, resolution['model_method_fn'])
         setattr(namespace, "%s_source" % self.dest, resolution.get('source', None))
+        setattr(namespace, "%s_source_sha1hex" % self.dest, resolution.get('source_sha1hex', None))
         setattr(namespace, "%s_via_python" % self.dest, resolution.get('via_python', None))
         setattr(namespace, "%s_raw" % self.dest, resolution.get('leading_value', None))
 
@@ -100,6 +103,7 @@ parser.add_argument('--publish', default=False, action='store_true', help='Publi
 parser.add_argument('--bind', type=str, default='127.0.0.1:5000', help='Set address:port to serve on')
 parser.add_argument('--export', type=str, help='path to export to')
 parser.add_argument('--export-doc', type=str, help='path to export doc to')
+parser.add_argument('--watch', default=False, action='store_true', help='Watch given model and reload when it changes')
 parser.add_argument('--interactive', '-i', default=None, action='store_true', help='Start interactive session')
 parser.add_argument('specifier', type=str, default=None, nargs=argparse.REMAINDER, action=ModelSpecifier, help='fully qualified class name to instantiate')
 
@@ -163,6 +167,41 @@ def run(argns, remaining_args):
 
     if argns.interactive is None:
         argns.interactive = not batch and not exporting and not serving and not publishing
+
+    if argns.watch:
+        if not argns.specifier_can_refresh:
+            print("WARN: Can't watch unrefreshable model.")
+        else:
+            import pywatchman
+            import threading
+            import time
+
+            def run_client():
+                with pywatchman.client() as c:
+                    specifier_dir, specifier_base = os.path.split(argns.specifier_source)
+                    subscription_name = 'mysubscription'
+                    c.query('subscribe', specifier_dir, subscription_name, {
+                        "expression": ["allof", ["match", specifier_base]],
+                        "fields": ["name", "size", "mtime_ms", "exists", "type", "content.sha1hex"],
+                    })
+                    last_sha = argns.specifier_source_sha1hex
+                    while True:
+                        try:
+                            c.receive()
+                            for e in c.getSubscription(subscription_name):
+                                for f in e['files']:
+                                    if f['name'] != specifier_base:
+                                        continue
+
+                                    sha = f['content.sha1hex']
+                                    if last_sha != sha:
+                                        argns.specifier_refresh_fn()
+                                        last_sha = sha
+
+                        except pywatchman.SocketTimeout:
+                            time.sleep(.1)
+
+            threading.Thread(target=run_client, daemon=True).start()
 
     if argns.interactive:
         from tfi.repl import run as run_repl
