@@ -86,10 +86,10 @@ class ModelSpecifier(argparse.Action):
             leading_value = None
             rest = []
 
-        resolution  = _resolve_model(_model_class_from_path_fn, leading_value, rest)
+        resolution = _resolve_model(_model_class_from_path_fn, leading_value, rest)
 
         setattr(namespace, self.dest, resolution['model'])
-        setattr(namespace, "%s_can_refresh" % self.dest, resolution['can_refresh'])
+        setattr(namespace, "%s_can_refresh" % self.dest, resolution.get('can_refresh', None))
         setattr(namespace, "%s_refresh_fn" % self.dest, resolution.get('refresh_fn', None))
         setattr(namespace, "%s_method_fn" % self.dest, resolution['model_method_fn'])
         setattr(namespace, "%s_source" % self.dest, resolution.get('source', None))
@@ -99,6 +99,7 @@ class ModelSpecifier(argparse.Action):
 
 parser = argparse.ArgumentParser(prog='tfi', add_help=False)
 parser.add_argument('--serve', default=False, action='store_true', help='Start REST API on given port')
+parser.add_argument('--internal-config', type=str, help='For internal use.')
 parser.add_argument('--publish', default=False, action='store_true', help='Publish model')
 parser.add_argument('--bind', type=str, default='127.0.0.1:5000', help='Set address:port to serve on')
 parser.add_argument('--export', type=str, help='path to export to')
@@ -146,14 +147,22 @@ def run(argns, remaining_args):
         """
 
         host, port = argns.bind.split(':')
+        prefork_ok = True
         port = int(port)
         if model is None:
+            if argns.internal_config == 'tensorflow':
+                prefork_ok = False
+
             from tfi.serve import run_deferred as serve_deferred
             serve_deferred(
                     host=host, port=port,
+                    prefork_ok=prefork_ok,
                     model_class_from_path_fn=argns.model_class_from_path_fn,
                     extra_scripts=segment_js)
         else:
+            if _detect_model_object_kind(model) == 'tensorflow':
+                prefork_ok = False
+
             from tfi.serve import run as serve
             def model_file_fn():
                 if argns.specifier_source and not argns.specifier_via_python:
@@ -163,7 +172,12 @@ def run(argns, remaining_args):
                     _model_export(f.name, model)
                     print(" done", flush=True)
                     return f.name
-            serve(model, host=host, port=port, extra_scripts=segment_js, model_file_fn=model_file_fn)
+            serve(model,
+                    host=host,
+                    port=port,
+                    prefork_ok=prefork_ok,
+                    extra_scripts=segment_js,
+                    model_file_fn=model_file_fn)
 
     if argns.interactive is None:
         argns.interactive = not batch and not exporting and not serving and not publishing
@@ -175,6 +189,7 @@ def run(argns, remaining_args):
             import pywatchman
             import threading
             import time
+            import traceback
 
             def run_client():
                 with pywatchman.client() as c:
@@ -195,7 +210,11 @@ def run(argns, remaining_args):
 
                                     sha = f['content.sha1hex']
                                     if last_sha != sha:
-                                        argns.specifier_refresh_fn()
+                                        try:
+                                            argns.specifier_refresh_fn()
+                                        except:
+                                            traceback.print_exc()
+
                                         last_sha = sha
 
                         except pywatchman.SocketTimeout:

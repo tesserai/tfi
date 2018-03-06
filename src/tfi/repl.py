@@ -109,7 +109,6 @@ def _configure_repl(repl):
 
 def run(globals=None, locals=None, history_filename=None, model=None):
     g = dict(globals)
-    # g['tfi'] = tfi
     if model is not None:
         g['m'] = model
         print("Added model to environment as m")

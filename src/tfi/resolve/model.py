@@ -81,7 +81,6 @@ def _reify(resolution):
     resolution['model_fn_needed_params'] = needed_params
     resolution['model_members'] = members
     resolution['model_fn'] = model_fn
-
     
     return resolution
 
@@ -182,7 +181,7 @@ def resolve_python_source(leading_value):
     with open(source, 'rb') as f:
         m = hashlib.sha1()
         m.update(f.read())
-        sha1hex = m.digest()
+        sha1hex = m.hexdigest()
 
     return _reify({
         'source': source,

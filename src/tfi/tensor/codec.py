@@ -35,7 +35,6 @@ class _BaseAdapter(object):
         candidate_dtype = dtype
         check_dtype = lambda o: isinstance(o, candidate_dtype)
         for o in object:
-
             r.append(self.as_tensor(o, sub_shape, dtype))
             cur_len += 1
             if expect_len is not None and cur_len > expect_len:

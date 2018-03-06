@@ -47,4 +47,4 @@ WORKDIR /code
 
 ENV CONDA_ENV_NAME ${CONDA_ENV_NAME}
 ENTRYPOINT ["entrypoint.sh"]
-CMD ["--bind=0.0.0.0:8888", "--serve"]
+CMD ["--bind=0.0.0.0:8888", "--serve", "--internal-config=${CONDA_ENV_NAME}"]
