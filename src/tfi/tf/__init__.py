@@ -13,6 +13,7 @@ import types
 import warnings
 
 import tensorflow as tf
+import numpy as np
 from tensorflow.core.framework import types_pb2
 from tensorflow.python.client import session
 from tensorflow.python.debug.wrappers import local_cli_wrapper
@@ -154,8 +155,9 @@ class _CopyingCall(object):
         }
 
 class _RenderedInstanceMethod(object):
-    def __init__(self, doc, input_tensors, output_tensors, method_name, call_fn):
+    def __init__(self, doc, input_tensors, output_tensors, method_name, call_fn, estimator_mode):
         self.doc = doc
+        self.estimator_mode = estimator_mode
         self._input_tensors = input_tensors
         self._output_tensors = output_tensors
         self._method_name = method_name
@@ -254,10 +256,10 @@ def _resolve_instance_method_tensors(lazy_instance, method):
             input_tensors=input_tensors,
             output_tensors=output_tensors,
             method_name=method.__tfi_method_name__ if hasattr(method, '__tfi_method_name__') else None,
+            estimator_mode=method.__tfi_estimator_mode__ if hasattr(method, '__tfi_estimator_mode__') else None,
             call_fn=call_fn)
 
 def _make_method(instance, signature_def, var_list):
-    # print("_make_method", signature_def)
     # Sort to preserve order because we need to go from value to key later.
     output_tensor_keys_sorted = sorted(signature_def.outputs.keys())
     output_tensor_names_sorted = [
@@ -268,7 +270,7 @@ def _make_method(instance, signature_def, var_list):
     input_tensor_names_sorted = sorted(signature_def.inputs.keys())
 
     def session_handle_for(value, signature_def_input):
-        if isinstance(value, (int, float)):
+        if isinstance(value, (int, float, np.ndarray)):
             return None
         # TODO(adamb) This might append to the default graph. These appends
         #     should be cached and idempotent. The added nodes should be
@@ -283,7 +285,7 @@ def _make_method(instance, signature_def, var_list):
 
     def _impl(self, **kwargs):
         feed_dict = {}
-        session = self.__tfi_session__
+        session = self.__tfi_get_session__()
         with session.graph.as_default():
             # Cache whether or not we've initialized vars for this method + instance.
             # If not, lazily initialize any vars we'll need.
@@ -301,6 +303,7 @@ def _make_method(instance, signature_def, var_list):
 
             handle_keys = []
             handle_in = []
+            handles = []
             for key in input_tensor_names_sorted:
                 input = signature_def.inputs[key]
                 value = kwargs[key]
@@ -315,11 +318,14 @@ def _make_method(instance, signature_def, var_list):
 
             for key, fh in zip(handle_keys, session.run(handle_in)):
                 feed_dict[key] = fh
+                handles.append(fh)
 
-            # print('feed_dict', feed_dict)
             result = session.run(
                 output_tensor_names_sorted,
                 feed_dict=feed_dict)
+
+            for fh in handles:
+                tf.delete_session_tensor(fh)
 
         return dict(zip(output_tensor_keys_sorted, result))
 
@@ -340,6 +346,7 @@ def _make_method(instance, signature_def, var_list):
 def _infer_signature_defs(class_dict, instance):
     signature_defs = OrderedDict()
     signature_def_docs = OrderedDict()
+    estimator_modes = OrderedDict()
 
     fields = instance.__dict__
     # print("fields", fields)
@@ -371,8 +378,9 @@ def _infer_signature_defs(class_dict, instance):
         resolved_method = _resolve_attr(method_name)
         signature_def_docs[method_name] = resolved_method.doc
         signature_defs[method_name] = resolved_method.build_signature_def()
-    
-    return signature_defs, signature_def_docs
+        estimator_modes[method_name] = resolved_method.estimator_mode
+
+    return signature_defs, signature_def_docs, estimator_modes
 
 class Meta(type):
     @staticmethod
@@ -387,6 +395,18 @@ class Meta(type):
             # Wrap __init__ to graph, session, and methods.
             @functools.wraps(init)
             def wrapped_init(self, *a, **k):
+                if '__tfi_graph__' in k:
+                    graph = k['__tfi_graph__']
+                    del k['__tfi_graph__']
+                else:
+                    graph = tf.Graph()
+
+                if '__tfi_skip_method_render__' in k:
+                    do_method_render = not k['__tfi_skip_method_render__']
+                    del k['__tfi_skip_method_render__']
+                else:
+                    do_method_render = True
+
                 if not hasattr(self, '__tfi_hyperparameters__'):
                     hparam_docs = {}
                     if hasattr(init, '__doc__') and init.__doc__:
@@ -401,53 +421,41 @@ class Meta(type):
                         for hparam_name, hparam_val in list(ba.arguments.items())[1:] # ignore self
                     ]
 
-                self.__tfi_graph__ = tf.Graph()
-                config = tf.ConfigProto(
-                    device_count={'CPU' : 1, 'GPU' : 0},
-                    allow_soft_placement=True,
-                    log_device_placement=False,
-                    gpu_options={'allow_growth': True},
-                )
-                self.__tfi_session__ = tf.Session(graph=self.__tfi_graph__, config=config)
-                with self.__tfi_graph__.as_default():
-                    with self.__tfi_session__.as_default():
-                        init(self, *a, **k)
+                self.__tfi_graph__ = graph
+                self.__tfi_session__ = None
 
-                        # Once init has executed, we can bind proper methods too!
-                        if not hasattr(self, '__tfi_signature_defs__'):
-                            self.__tfi_signature_defs__, self.__tfi_signature_def_docs__ = _infer_signature_defs(d, self)
+                with graph.as_default():
+                    init(self, *a, **k)
 
-                # print("__tfi_signature_defs__", list(self.__tfi_signature_defs__.keys()))
+                    # Once init has executed, we can bind proper methods too!
+                    if not hasattr(self, '__tfi_signature_defs__'):
+                        self.__tfi_signature_defs__, self.__tfi_signature_def_docs__, self.__tfi_estimator_modes__ = _infer_signature_defs(d, self)
 
                     if not hasattr(self, '__tfi_vars_initialized__'):
                         self.__tfi_vars_initialized__ = set()
 
-                    all_var_ops = {
-                        v.op: v
-                        for v in [*tf.global_variables(), *tf.local_variables()]
-                    }
-                        # print("all_var_ops", all_var_ops)
-                    for method_name, sigdef in self.__tfi_signature_defs__.items():
-                        method_vars = set()
-                        def visit_method_node(o):
-                            if isinstance(o, tf.Operation):
-                                if o in all_var_ops:
-                                    method_vars.add(all_var_ops[o])
-                                # else:
-                                #     print("OP NOT A VAR", o.name)
-                            elif o.op in all_var_ops:
-                                method_vars.add(all_var_ops[o.op])
-                            # else:
-                            #     print("OTHER NOT A VAR", o.name, o.op, )
+                    if do_method_render:
+                        all_var_ops = {
+                            v.op: v
+                            for v in [*tf.global_variables(), *tf.local_variables()]
+                        }
 
-                        graph = self.__tfi_graph__
-                        _walk([graph.get_tensor_by_name(ti.name) for ti in sigdef.outputs.values()],
-                            [graph.get_tensor_by_name(ti.name) for ti in sigdef.inputs.values()],
-                            visit_method_node)
+                        for method_name, sigdef in self.__tfi_signature_defs__.items():
+                            # Should method_var calculation be inside of _make_method?
+                            method_vars = set()
+                            def visit_method_node(o):
+                                if isinstance(o, tf.Operation):
+                                    if o in all_var_ops:
+                                        method_vars.add(all_var_ops[o])
+                                elif o.op in all_var_ops:
+                                    method_vars.add(all_var_ops[o.op])
 
-                        setattr(self,
-                                method_name,
-                                _make_method(self, sigdef, method_vars))
+                            _walk([graph.get_tensor_by_name(ti.name) for ti in sigdef.outputs.values()],
+                                [graph.get_tensor_by_name(ti.name) for ti in sigdef.inputs.values()],
+                                visit_method_node)
+
+                            method = _make_method(self, sigdef, method_vars)
+                            setattr(self, method_name, method)
 
             if hasattr(init, '__doc__'):
                 wrapped_init.__doc__ = init.__doc__
@@ -463,8 +471,17 @@ class Meta(type):
                 return fn
             return install_tfi_method_name
 
+        def estimator_mode_decorator(mode):
+            def install_tfi_estimator_mode(fn):
+                if hasattr(fn, '__tfi_estimator_mode__'):
+                    raise Exception("Already specified @tfi_estimator_mode for %s" % fn)
+                fn.__tfi_estimator_mode__ = mode
+                return fn
+            return install_tfi_estimator_mode
+
         d = OrderedDict({
             'tfi_method_name': method_name_decorator,
+            'tfi_estimator_mode': estimator_mode_decorator,
             'self': _GetAttrAccumulator(),
         })
         # NOTE(adamb) Remember to delete all of these! Every item in here is
@@ -475,40 +492,86 @@ class Meta(type):
         return d
 
 class Base(object, metaclass=Meta):
-    def __tfi_refresh__(self):
-        if not hasattr(self, '__tfi_hyperparameters__'):
-            return
+    def __tfi_get_session__(self):
+        if not self.__tfi_session__:
+            graph = self.__tfi_graph__
+            config = tf.ConfigProto(
+                device_count={'CPU' : 1, 'GPU' : 0},
+                allow_soft_placement=True,
+                log_device_placement=False,
+                gpu_options={'allow_growth': True},
+            )
+            self.__tfi_session__ = tf.Session(graph=graph, config=config)
+        return self.__tfi_session__
 
-        previous_session = self.__tfi_session__
-        with previous_session.graph.as_default():
-            previous_vars = {
+    def __tfi_save_initialized_vars__(self, dir):
+        if not self.__tfi_session__:
+            return [], None
+
+        session = self.__tfi_session__
+        with session.graph.as_default():
+            vars = {
                 *tf.global_variables(),
                 *tf.local_variables(),
                 *tf.model_variables(),
             }
-            uninit_op = tf.report_uninitialized_variables(list(previous_vars))
+            uninit_op = tf.report_uninitialized_variables(list(vars))
             uninit_op.mark_used()
-            uninit_var_names = set(uninit_op.eval(session=previous_session))
-            init_vars = [var for var in previous_vars if var.name[:-2].encode('utf-8') not in uninit_var_names]
-            previous_saved_prefix = None
+            uninit_var_names = set(uninit_op.eval(session=session))
+            init_vars = [var for var in vars if var.name[:-2].encode('utf-8') not in uninit_var_names]
+
+            saved_prefix = None
+            init_var_names = []
             if init_vars:
-                previous_saver = tf.train.Saver(var_list=init_vars)
-                previous_saved_prefix = previous_saver.save(previous_session, '/tmp/tf-saving')
-                print('previous_saved_prefix', previous_saved_prefix)
+                saver = tf.train.Saver(var_list=list(init_vars))
+                saved_prefix = saver.save(session, dir)
+                print('saved_prefix', saved_prefix)
+                init_var_names = {var.name for var in init_vars}
+
+            return init_var_names, saved_prefix
+
+    def __tfi_restore_vars__(self, saved_prefix, var_filter):
+        with self.__tfi_graph__.as_default():
+            vars = {
+                *tf.global_variables(),
+                *tf.local_variables(),
+                *tf.model_variables(),
+            }
+            # Only restore vars that still exist *and* were previously initialized.
+            vars = [var for var in vars if var_filter(var)]
+            if vars:
+                saver = tf.train.Saver(var_list=vars)
+                saver.restore(self.__tfi_get_session__(), saved_prefix)
+
+    def __tfi_hyperparameters_dict__(self):
+        return {
+            name: val
+            for (name, _, val, _) in self.__tfi_hyperparameters__
+        }
+
+    def __tfi_refresh__(self):
+        if not hasattr(self, '__tfi_hyperparameters__'):
+            return
+
+        previous_init_var_names, previous_saved_prefix = self.__tfi_save_initialized_vars__('/tmp/tf-saving')
+        previous_session = self.__tfi_session__
 
         # Delete everything that might accidentally pollute our new version, but keep a backup.
         backup = dict(self.__dict__)
         for attr in backup.keys():
             if attr in ['__tfi_hyperparameters__', '__tfi_vars_initialized__']:
                 continue
-            # print("Removing", attr)
             delattr(self, attr)
 
         try:
+            # Compute init kwargs based on the hyperparameters needed by the latest one
+            hparams = self.__tfi_hyperparameters_dict__()
+            empty = inspect.Signature.empty
             init_kw = {
-                name: val
-                for (name, _, val, _) in self.__tfi_hyperparameters__
+                name: hparams.get(name, param.default if param.default != empty else None)
+                for name, param in inspect.signature(self.__init__).parameters.items()
             }
+            # Compute init kwargs based on existing hyperparameters
             self.__init__(**init_kw)
         except:
             # Undo our mess!
@@ -516,19 +579,11 @@ class Base(object, metaclass=Meta):
             self.__dict__.update(backup)
             raise
 
-        # TODO(adamb) Need to checkpoint all variables in previous_session and
-        #     load them into the current one.
-        if previous_saved_prefix:
-            with self.__tfi_session__.graph.as_default():
-                latest_vars = {
-                    *tf.global_variables(),
-                    *tf.local_variables(),
-                    *tf.model_variables(),
-                }
-                print('latest_vars', latest_vars)
-                if latest_vars:
-                    latest_saver = tf.train.Saver()
-                    latest_saver.restore(self.__tfi_session__, previous_saved_prefix)
+        if previous_saved_prefix and previous_init_var_names:
+            self.__tfi_restore_vars__(previous_saved_prefix, lambda var: var.name in previous_init_var_names)
+
+        if previous_session:
+            previous_session.close()
 
 def as_class(saved_model_dir, tag_set=tf.saved_model.tag_constants.SERVING):
     from tensorflow.contrib.saved_model.python.saved_model import reader
@@ -551,6 +606,7 @@ def as_class(saved_model_dir, tag_set=tf.saved_model.tag_constants.SERVING):
                 loader.load(tf.get_default_session(), tag_set.split(','), saved_model_dir),
         '__tfi_signature_defs__':
                 signature_defs,
+        '__tfi_estimator_modes__': {},
     })
 
 def export(export_path, model):
@@ -589,3 +645,98 @@ def export(export_path, model):
               legacy_init_op=legacy_init_op,
               signature_def_map=model.__tfi_signature_defs__)
         builder.save()
+
+def as_estimator(model_or_class, model_dir=None):
+    def _make_model_fn_from_class(c, estimator_modes):
+        def model_fn(features, labels, mode, params, config):
+            """
+            Args:
+            features: This is the first item returned from the input_fn passed to
+                        train, evaluate, and predict. This should be a single Tensor
+                        or dict of same.
+            labels: This is the second item returned from the input_fn passed to
+                    train, evaluate, and predict. This should be a single Tensor or
+                    dict of same (for multi-head models). If mode is ModeKeys.PREDICT,
+                    labels=None will be passed. If the model_fn's signature does not
+                    accept mode, the model_fn must still be able to handle labels=None.
+            mode: Optional. Specifies if this training, evaluation or prediction.
+                    See ModeKeys.
+            params: Optional dict of hyperparameters. Will receive what is passed
+                    to Estimator in params parameter. This allows to configure
+                    Estimators from hyper parameter tuning.
+            config: Optional configuration object. Will receive what is passed to
+                    Estimator in config parameter, or the default config. Allows
+                    updating things in your model_fn based on configuration such
+                    as num_ps_replicas, or model_dir.
+            Returns:
+            EstimatorSpec
+            """
+            # NOTE(adamb) We MUST wait to create instance until we're within model_fn, since
+            # the Estimator implementation defines its own Graph and Session.
+            print("params", params)
+            matching = []
+            for method_name, method_mode in estimator_modes.items():
+                if method_mode == mode:
+                    matching.append(method_name)
+
+            if not matching:
+                raise Exception("No estimator configuration for mode %s for %s. Have: %s" % (mode, c, set(estimator_modes.values())))
+
+            if len(matching) > 1:
+                raise Exception("Found multiple matching estimator configurations for mode %s for model %s: %s" % (mode, model, matching))
+            method_name = matching[0]
+
+            call_fn = getattr(c, method_name)
+
+            i = c(
+                __tfi_graph__=tf.get_default_graph(),
+                __tfi_skip_method_render__=True,
+                **params)
+
+            call_args = [i]
+            call_kwargs = {}
+            if isinstance(features, dict):
+                for k, v in features.items():
+                    call_kwargs[k] = v
+            elif labels is None:
+                call_args = [features]
+            else:
+                call_kwargs['features'] = features
+
+            if isinstance(labels, dict):
+                for k, v in labels.items():
+                    call_kwargs[k] = v
+            elif labels is not None:
+                call_kwargs['labels'] = labels
+
+            result = call_fn(*call_args, **call_kwargs)
+            es_kwargs = {
+                k: result[k]
+                for k in ['predictions', 'loss', 'train_op', 'eval_metric_ops']
+                if k in result
+            }
+            es_kwargs['mode'] = mode
+            return tf.estimator.EstimatorSpec(**es_kwargs)
+
+        return model_fn
+
+    def _make_estimator_from_instance(instance):
+        params = instance.__tfi_hyperparameters_dict__()
+
+        return tf.estimator.Estimator(
+            model_fn=_make_model_fn_from_class(
+                    instance.__class__,
+                    instance.__tfi_estimator_modes__),
+            model_dir=model_dir,
+            config=None,
+            params=params,
+            warm_start_from=None,
+        )
+
+    if not isinstance(model_or_class, tfi.tf.Base):
+        raise Exception('%s is not an instance of Base' % instance)
+
+    model = model_or_class
+
+    return _make_estimator_from_instance(model_or_class)
+
