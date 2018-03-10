@@ -2,6 +2,7 @@ import ast
 import hashlib
 import inspect
 import os.path
+import weakref
 
 from collections import OrderedDict
 from functools import partial
@@ -59,22 +60,29 @@ def _reify(resolution):
     members = [(k, v) for (k, v) in members if not k.startswith('_')]
 
     if resolution['can_refresh'] and is_loaded_a_class:
-        models = []
+        models = weakref.WeakSet()
         orig_model_fn = model_fn
-        def wrapped_model_fn(*a, **kw):
+
+        def _wrapped_model_fn(*a, **kw):
             model = orig_model_fn(*a, **kw)
             # TODO(adamb) Should actually use weak references to avoid a memory leak!
-            models.append(model)
+
+            models.add(model)
             return model
-        model_fn = wrapped_model_fn
+        model_fn = _wrapped_model_fn
 
         def refresh_model():
             reloaded = loaded_fn()
             for model in models:
-                model.__class__ = reloaded
-                print("Replacing __class__", model, id(reloaded), reloaded)
-                if hasattr(model, '__tfi_refresh__'):
-                    model.__tfi_refresh__()
+                previous_class = model.__class__
+                try:
+                    model.__class__ = reloaded
+                    print("Replacing __class__", model, id(reloaded), reloaded)
+                    if hasattr(model, '__tfi_refresh__'):
+                        model.__tfi_refresh__()
+                except:
+                    model.__class__ = previous_class
+                    raise
 
         resolution['refresh_fn'] = refresh_model
 
