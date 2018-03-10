@@ -233,6 +233,13 @@ def _resolve_instance_method_tensors(lazy_instance, method):
         # If method isn't empty, assume annotations on parameters are kwargs for tf.placeholder
         # Make the resulting graph a bit nicer to read with scope names:
         # <method>/inputs, <method>/_, <method>/outputs.
+        drop_output_keys = method.__tfi_drop__ if hasattr(method, '__tfi_drop__') else []
+        def _as_output_tensor(name, t):
+            if isinstance(t, tf.Operation):
+                with tf.control_dependencies([t]):
+                    return tf.identity(0, name=name)
+            return tf.identity(t, name=name)
+
         with tf.name_scope(method.__name__):
             with tf.name_scope("inputs"):
                 input_tensors = {
@@ -243,8 +250,9 @@ def _resolve_instance_method_tensors(lazy_instance, method):
                 output_tensors = method(**input_tensors)
             with tf.name_scope("outputs"):
                 output_tensors = {
-                    output_name: tf.identity(t, name=output_name)
+                    output_name: _as_output_tensor(output_name, t)
                     for output_name, t in output_tensors.items()
+                    if output_name not in drop_output_keys
                 }
         call_fn = method
 
@@ -467,9 +475,19 @@ class Meta(type):
     def __prepare__(name, bases):
         def method_name_decorator(name):
             def install_tfi_method_name(fn):
+                if hasattr(fn, '__tfi_method_name__'):
+                    raise Exception("Already specified @tfi_method_name for %s" % fn)
                 fn.__tfi_method_name__ = name
                 return fn
             return install_tfi_method_name
+
+        def drop_decorator(keys):
+            def install_tfi_drop(fn):
+                if hasattr(fn, '__tfi_drop__'):
+                    raise Exception("Already specified @tfi_drop for %s" % fn)
+                fn.__tfi_drop__ = keys
+                return fn
+            return install_tfi_drop
 
         def estimator_mode_decorator(mode):
             def install_tfi_estimator_mode(fn):
@@ -482,6 +500,7 @@ class Meta(type):
         d = OrderedDict({
             'tfi_method_name': method_name_decorator,
             'tfi_estimator_mode': estimator_mode_decorator,
+            'tfi_drop': drop_decorator,
             'self': _GetAttrAccumulator(),
         })
         # NOTE(adamb) Remember to delete all of these! Every item in here is
@@ -532,14 +551,16 @@ class Base(object, metaclass=Meta):
 
     def __tfi_restore_vars__(self, saved_prefix, var_filter):
         with self.__tfi_graph__.as_default():
-            vars = {
+            all_vars = {
                 *tf.global_variables(),
                 *tf.local_variables(),
                 *tf.model_variables(),
             }
             # Only restore vars that still exist *and* were previously initialized.
-            vars = [var for var in vars if var_filter(var)]
+            vars = [var for var in all_vars if var_filter(var)]
+            print("might restore", all_vars, "from", saved_prefix)
             if vars:
+                print("restoring", vars, "from", saved_prefix)
                 saver = tf.train.Saver(var_list=vars)
                 saver.restore(self.__tfi_get_session__(), saved_prefix)
 
@@ -580,7 +601,9 @@ class Base(object, metaclass=Meta):
             raise
 
         if previous_saved_prefix and previous_init_var_names:
-            self.__tfi_restore_vars__(previous_saved_prefix, lambda var: var.name in previous_init_var_names)
+            self.__tfi_restore_vars__(
+                    previous_saved_prefix,
+                    lambda var: var.name in previous_init_var_names)
 
         if previous_session:
             previous_session.close()
@@ -646,8 +669,15 @@ def export(export_path, model):
               signature_def_map=model.__tfi_signature_defs__)
         builder.save()
 
+class _SessionEndHook(tf.train.SessionRunHook):
+    def __init__(self, end_hook):
+        self._end_hook = end_hook
+
+    def end(self, session):
+        self._end_hook(session)
+
 def as_estimator(model_or_class, model_dir=None):
-    def _make_model_fn_from_class(c, estimator_modes):
+    def _make_model_fn_from_class(c, estimator_modes, hooks):
         def model_fn(features, labels, mode, params, config):
             """
             Args:
@@ -673,10 +703,9 @@ def as_estimator(model_or_class, model_dir=None):
             """
             # NOTE(adamb) We MUST wait to create instance until we're within model_fn, since
             # the Estimator implementation defines its own Graph and Session.
-            print("params", params)
             matching = []
-            for method_name, method_mode in estimator_modes.items():
-                if method_mode == mode:
+            for method_name, _mode in estimator_modes.items():
+                if _mode == mode:
                     matching.append(method_name)
 
             if not matching:
@@ -684,9 +713,8 @@ def as_estimator(model_or_class, model_dir=None):
 
             if len(matching) > 1:
                 raise Exception("Found multiple matching estimator configurations for mode %s for model %s: %s" % (mode, model, matching))
-            method_name = matching[0]
 
-            call_fn = getattr(c, method_name)
+            call_fn = getattr(c, matching[0])
 
             i = c(
                 __tfi_graph__=tf.get_default_graph(),
@@ -709,29 +737,59 @@ def as_estimator(model_or_class, model_dir=None):
             elif labels is not None:
                 call_kwargs['labels'] = labels
 
-            result = call_fn(*call_args, **call_kwargs)
-            es_kwargs = {
-                k: result[k]
-                for k in ['predictions', 'loss', 'train_op', 'eval_metric_ops']
-                if k in result
-            }
-            es_kwargs['mode'] = mode
-            return tf.estimator.EstimatorSpec(**es_kwargs)
+            r = call_fn(*call_args, **call_kwargs)
+
+            is_train = mode == tf.estimator.ModeKeys.TRAIN
+            is_eval = mode == tf.estimator.ModeKeys.EVAL
+            is_predict = mode == tf.estimator.ModeKeys.PREDICT
+
+            return tf.estimator.EstimatorSpec(
+                mode=mode,
+                predictions=r if is_predict else None,
+                loss=r['loss'] if is_train or is_eval else None,
+                train_op=r['train_op'] if is_train else None,
+                eval_metric_ops=r['eval_metric_ops'] if 'eval_metric_ops' in r and (is_train or is_eval) else None,
+                training_hooks=hooks.get('train', None),
+                evaluation_hooks=hooks.get('eval', None),
+                prediction_hooks=hooks.get('infer', None),
+            )
 
         return model_fn
 
     def _make_estimator_from_instance(instance):
-        params = instance.__tfi_hyperparameters_dict__()
+        saved_vars, saved_prefix = instance.__tfi_save_initialized_vars__('/tmp/tf-estimatorz')
+        warm_start_from = tf.estimator.WarmStartSettings(saved_prefix) if saved_prefix else None
 
-        return tf.estimator.Estimator(
+        config = tf.estimator.RunConfig(
+            model_dir=model_dir,
+            tf_random_seed=None,
+            # steps=100,
+            session_config=None,
+            keep_checkpoint_max=5,
+            keep_checkpoint_every_n_hours=10000,
+            log_step_count_steps=100,
+        )
+
+        estimator = None
+        def train_hook(session):
+            trained_var_names = set(estimator.get_variable_names())
+            print("will try to restore", trained_var_names)
+            instance.__tfi_restore_vars__(
+                estimator.latest_checkpoint(),
+                lambda var: var.op.name in trained_var_names)
+
+        estimator = tf.estimator.Estimator(
             model_fn=_make_model_fn_from_class(
                     instance.__class__,
-                    instance.__tfi_estimator_modes__),
-            model_dir=model_dir,
-            config=None,
-            params=params,
-            warm_start_from=None,
+                    instance.__tfi_estimator_modes__,
+                    hooks={
+                        'train': [_SessionEndHook(train_hook)],
+                    }),
+            config=config,
+            params=instance.__tfi_hyperparameters_dict__(),
+            warm_start_from=warm_start_from,
         )
+        return estimator
 
     if not isinstance(model_or_class, tfi.tf.Base):
         raise Exception('%s is not an instance of Base' % instance)
