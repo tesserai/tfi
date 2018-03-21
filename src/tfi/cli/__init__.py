@@ -6,10 +6,7 @@ from functools import partial
 
 from tfi.base import _GetAttrAccumulator as _GetAttrAccumulator
 from tfi.data import file as _tfi_data_file
-from tfi.resolve.model import resolve_exported as _resolve_exported
-from tfi.resolve.model import resolve_url as _resolve_url
-from tfi.resolve.model import resolve_python_source as _resolve_python_source
-from tfi.resolve.model import resolve_module as _resolve_module
+from tfi.resolve.model import resolve_auto as _resolve_auto
 
 def _split_list(l, delim):
     for ix in range(0, len(l)):
@@ -30,21 +27,8 @@ def _resolve_needed_params(method, have_kwargs=None):
 
     return needed
 
-def resolve(model_class_from_path_fn, leading_value, rest):
-    if leading_value is None:
-        resolution = {
-            'source': "",
-            'loaded': None,
-        }
-    elif leading_value.startswith('@'):
-        resolution = _resolve_exported(model_class_from_path_fn, leading_value[1:])
-    elif leading_value.startswith('http://') or leading_value.startswith('https://'):
-        resolution = _resolve_url(model_class_from_path_fn, leading_value)
-    elif '.py:' in leading_value:
-        resolution = _resolve_python_source(leading_value)
-    else:
-        resolution = _resolve_module(leading_value)
-
+def resolve(leading_value, rest):
+    resolution = _resolve_auto(leading_value)
     if 'model_fn_needed_params' not in resolution:
         resolution['model_method_fn'] = None
         resolution['model'] = None

@@ -26,6 +26,7 @@ from tfi.parse.docstring import GoogleDocstring
 from tfi.tensor.codec import _BaseAdapter
 from tfi.tf.tensor_codec import as_tensor
 
+import tfi.tensor.frame
 import tfi.tf.checkpoint
 
 def _walk(out_tensors, in_tensors, fn):
@@ -155,9 +156,11 @@ class _CopyingCall(object):
         }
 
 class _RenderedInstanceMethod(object):
-    def __init__(self, doc, input_tensors, output_tensors, method_name, call_fn, estimator_mode):
+    def __init__(self, doc, input_tensors, output_tensors, output_tensor_shapes, output_tensor_shape_labels, method_name, call_fn, estimator_mode):
         self.doc = doc
         self.estimator_mode = estimator_mode
+        self.output_tensor_shapes = output_tensor_shapes
+        self.output_tensor_shape_labels = output_tensor_shape_labels
         self._input_tensors = input_tensors
         self._output_tensors = output_tensors
         self._method_name = method_name
@@ -225,6 +228,8 @@ def _resolve_instance_method_tensors(lazy_instance, method):
         for name, param in sig.parameters.items()
     ])
 
+    output_tensor_shapes = None
+    output_tensor_shape_labels = None
     if is_empty_method(method):
         input_tensors = input_annotations
         output_tensors = _expand_annotation(sig.return_annotation, default={})
@@ -247,11 +252,15 @@ def _resolve_instance_method_tensors(lazy_instance, method):
                     for name, placeholder_kwargs in input_annotations.items()
                 }
             with tf.name_scope("_"):
-                output_tensors = method(**input_tensors)
+                raw_output_tensors = method(**input_tensors)
+                output_tensor_shapes = None
+                if isinstance(raw_output_tensors, tfi.tensor.frame.TensorFrame):
+                    output_tensor_shapes = raw_output_tensors.shapes()
+                    output_tensor_shape_labels = raw_output_tensors.shape_labels()
             with tf.name_scope("outputs"):
                 output_tensors = {
                     output_name: _as_output_tensor(output_name, t)
-                    for output_name, t in output_tensors.items()
+                    for output_name, t in raw_output_tensors.items()
                     if output_name not in drop_output_keys
                 }
         call_fn = method
@@ -263,11 +272,13 @@ def _resolve_instance_method_tensors(lazy_instance, method):
             doc=_enriched_method_doc(input_tensors, output_tensors),
             input_tensors=input_tensors,
             output_tensors=output_tensors,
+            output_tensor_shapes=output_tensor_shapes,
+            output_tensor_shape_labels=output_tensor_shape_labels,
             method_name=method.__tfi_method_name__ if hasattr(method, '__tfi_method_name__') else None,
             estimator_mode=method.__tfi_estimator_mode__ if hasattr(method, '__tfi_estimator_mode__') else None,
             call_fn=call_fn)
 
-def _make_method(instance, signature_def, var_list):
+def _make_method(instance, signature_def, tensor_shapes, tensor_shape_labels, var_list):
     # Sort to preserve order because we need to go from value to key later.
     output_tensor_keys_sorted = sorted(signature_def.outputs.keys())
     output_tensor_names_sorted = [
@@ -335,7 +346,14 @@ def _make_method(instance, signature_def, var_list):
             for fh in handles:
                 tf.delete_session_tensor(fh)
 
-        return dict(zip(output_tensor_keys_sorted, result))
+        return tfi.tensor.frame.TensorFrame(*[
+            (
+                tensor_shapes[tensor_key] if tensor_shapes and tensor_key in tensor_shapes else None,
+                tensor_key,
+                tensor_result,
+            )
+            for tensor_key, tensor_result in zip(output_tensor_keys_sorted, result)
+        ], **(tensor_shape_labels or {}))
 
     # Need to properly forge method parameters, complete with annotations.
     argnames = input_tensor_names_sorted
@@ -344,17 +362,24 @@ def _make_method(instance, signature_def, var_list):
     gensrc = """lambda %s: _impl(%s)""" % (argdef, argcall)
     impl = eval(gensrc, {'_impl': _impl})
     sigdef_inputs = signature_def.inputs
-    impl.__annotations__ = {
-        k: sigdef_inputs[k]
+    # NOTE(adamb) Should these annotations be sorted lexigraphically
+    impl.__annotations__ = OrderedDict([
+        (k, sigdef_inputs[k])
         for k, p in inspect.signature(impl).parameters.items()
         if k in sigdef_inputs
-    }
+    ])
+    sigdef_outputs = signature_def.outputs
+    impl.__annotations__['return'] = OrderedDict([
+        (k, sigdef_outputs[k])
+        for k in sorted(sigdef_outputs.keys())
+    ])
     return types.MethodType(impl, instance)
 
 def _infer_signature_defs(class_dict, instance):
     signature_defs = OrderedDict()
     signature_def_docs = OrderedDict()
     estimator_modes = OrderedDict()
+    signature_def_shapes = OrderedDict()
 
     fields = instance.__dict__
     # print("fields", fields)
@@ -384,11 +409,12 @@ def _infer_signature_defs(class_dict, instance):
 
     for method_name in raw_methods.keys():
         resolved_method = _resolve_attr(method_name)
+        signature_def_shapes[method_name] = (resolved_method.output_tensor_shapes, resolved_method.output_tensor_shape_labels)
         signature_def_docs[method_name] = resolved_method.doc
         signature_defs[method_name] = resolved_method.build_signature_def()
         estimator_modes[method_name] = resolved_method.estimator_mode
 
-    return signature_defs, signature_def_docs, estimator_modes
+    return signature_defs, signature_def_docs, estimator_modes, signature_def_shapes
 
 class Meta(type):
     @staticmethod
@@ -437,7 +463,7 @@ class Meta(type):
 
                     # Once init has executed, we can bind proper methods too!
                     if not hasattr(self, '__tfi_signature_defs__'):
-                        self.__tfi_signature_defs__, self.__tfi_signature_def_docs__, self.__tfi_estimator_modes__ = _infer_signature_defs(d, self)
+                        self.__tfi_signature_defs__, self.__tfi_signature_def_docs__, self.__tfi_estimator_modes__, self.__tfi_signature_def_shapes__ = _infer_signature_defs(d, self)
 
                     if not hasattr(self, '__tfi_vars_initialized__'):
                         self.__tfi_vars_initialized__ = set()
@@ -462,7 +488,8 @@ class Meta(type):
                                 [graph.get_tensor_by_name(ti.name) for ti in sigdef.inputs.values()],
                                 visit_method_node)
 
-                            method = _make_method(self, sigdef, method_vars)
+                            output_tensor_shapes, output_tensor_shape_labels = self.__tfi_signature_def_shapes__.get(method_name, ((), ()))
+                            method = _make_method(self, sigdef, output_tensor_shapes, output_tensor_shape_labels, method_vars)
                             setattr(self, method_name, method)
 
             if hasattr(init, '__doc__'):
@@ -630,6 +657,7 @@ def as_class(saved_model_dir, tag_set=tf.saved_model.tag_constants.SERVING):
         '__tfi_signature_defs__':
                 signature_defs,
         '__tfi_estimator_modes__': {},
+        '__tfi_signature_def_shapes__': {},
     })
 
 def export(export_path, model):
@@ -676,6 +704,23 @@ class _SessionEndHook(tf.train.SessionRunHook):
     def end(self, session):
         self._end_hook(session)
 
+def _estimator_method_name(estimator_modes, mode):
+    matching = []
+    for method_name, _mode in estimator_modes.items():
+        if _mode == mode:
+            matching.append(method_name)
+
+    if not matching:
+        raise Exception("No estimator configuration for mode %s for %s. Have: %s" % (mode, c, set(estimator_modes.values())))
+
+    if len(matching) > 1:
+        raise Exception("Found multiple matching estimator configurations for mode %s for model %s: %s" % (mode, model, matching))
+
+    return matching[0]
+
+def estimator_method(model, mode):
+    return getattr(model, _estimator_method_name(model.__tfi_estimator_modes__, mode))
+
 def as_estimator(model_or_class, model_dir=None):
     def _make_model_fn_from_class(c, estimator_modes, hooks):
         def model_fn(features, labels, mode, params, config):
@@ -703,18 +748,7 @@ def as_estimator(model_or_class, model_dir=None):
             """
             # NOTE(adamb) We MUST wait to create instance until we're within model_fn, since
             # the Estimator implementation defines its own Graph and Session.
-            matching = []
-            for method_name, _mode in estimator_modes.items():
-                if _mode == mode:
-                    matching.append(method_name)
-
-            if not matching:
-                raise Exception("No estimator configuration for mode %s for %s. Have: %s" % (mode, c, set(estimator_modes.values())))
-
-            if len(matching) > 1:
-                raise Exception("Found multiple matching estimator configurations for mode %s for model %s: %s" % (mode, model, matching))
-
-            call_fn = getattr(c, matching[0])
+            call_fn = getattr(c, _estimator_method_name(estimator_modes, mode))
 
             i = c(
                 __tfi_graph__=tf.get_default_graph(),
@@ -763,7 +797,6 @@ def as_estimator(model_or_class, model_dir=None):
         config = tf.estimator.RunConfig(
             model_dir=model_dir,
             tf_random_seed=None,
-            # steps=100,
             session_config=None,
             keep_checkpoint_max=5,
             keep_checkpoint_every_n_hours=10000,
@@ -778,6 +811,7 @@ def as_estimator(model_or_class, model_dir=None):
                 estimator.latest_checkpoint(),
                 lambda var: var.op.name in trained_var_names)
 
+        # We need to save a reference to the Estimator so we can export variables post training.
         estimator = tf.estimator.Estimator(
             model_fn=_make_model_fn_from_class(
                     instance.__class__,
@@ -793,8 +827,6 @@ def as_estimator(model_or_class, model_dir=None):
 
     if not isinstance(model_or_class, tfi.tf.Base):
         raise Exception('%s is not an instance of Base' % instance)
-
-    model = model_or_class
 
     return _make_estimator_from_instance(model_or_class)
 

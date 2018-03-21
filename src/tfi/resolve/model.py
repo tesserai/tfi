@@ -92,14 +92,51 @@ def _reify(resolution):
     
     return resolution
 
-def resolve_exported(model_class_from_path_fn, leading_value):
+def _detect_model_file_kind(file):
+    if os.path.isdir(file):
+        # It's a SavedModel!
+        return "tensorflow"
+
+    # Assume it's a PyTorch model!
+    return "pytorch"
+
+def _model_module_for_kind(kind):
+    if kind == "pytorch":
+        import tfi.pytorch
+        return tfi.pytorch
+    if kind == "tensorflow":
+        import tfi.tf
+        return tfi.tf
+    raise Exception("Can't detect model module %s" % model)
+
+def _model_class_from_path_fn(source):
+    kind = _detect_model_file_kind(source)
+    mod = _model_module_for_kind(kind)
+    return mod.as_class(source)
+
+def resolve_exported(leading_value):
     return _reify({
         'source': os.path.abspath(leading_value),
-        'loaded_fn': lambda: model_class_from_path_fn(leading_value),
+        'loaded_fn': lambda: _model_class_from_path_fn(leading_value),
         'can_refresh': False,
     })
 
-def resolve_url(model_class_from_path_fn, leading_value):
+def resolve_auto(leading_value):
+    if leading_value is None:
+        return {
+            'source': "",
+            'loaded': None,
+        }
+    if leading_value.startswith('@'):
+        return resolve_exported(leading_value[1:])
+    if leading_value.startswith('http://') or leading_value.startswith('https://'):
+        return resolve_url(leading_value)
+    if '.py:' in leading_value:
+        return resolve_python_source(leading_value)
+
+    return resolve_module(leading_value)
+
+def resolve_url(leading_value):
     # Load exported model via http(s)
     pre_initargs, *init_rest = leading_value.split("(", 1)
 
@@ -165,7 +202,7 @@ def resolve_url(model_class_from_path_fn, leading_value):
             return _reify({
                 'source': source,
                 'classname': classname,
-                'loaded_fn': lambda: model_class_from_path_fn(f.name),
+                'loaded_fn': lambda: _model_class_from_path_fn(f.name),
                 'module_fn': lambda: module,
                 'via_python': via_python,
                 'can_refresh': False,

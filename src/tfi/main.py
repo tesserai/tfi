@@ -15,6 +15,7 @@ import tempfile
 
 import tfi
 
+from tfi.resolve.model import _detect_model_file_kind, _model_module_for_kind, _model_class_from_path_fn
 from tfi.cli import resolve as _resolve_model
 from tfi.tensor.codec import encode as _tfi_tensor_codec_encode
 from tfi.format.iterm2 import imgcat as _tfi_format_iterm2_imgcat
@@ -32,28 +33,6 @@ def _detect_model_object_kind(model):
         if c.__module__ == "tfi.tf":
             return "tensorflow"
     raise Exception("Unknown model type %s" % klass)
-
-def _detect_model_file_kind(file):
-    if os.path.isdir(file):
-        # It's a SavedModel!
-        return "tensorflow"
-
-    # Assume it's a PyTorch model!
-    return "pytorch"
-
-def _model_module_for_kind(kind):
-    if kind == "pytorch":
-        import tfi.pytorch
-        return tfi.pytorch
-    if kind == "tensorflow":
-        import tfi.tf
-        return tfi.tf
-    raise Exception("Can't detect model module %s" % model)
-
-def _model_class_from_path_fn(source):
-    kind = _detect_model_file_kind(source)
-    mod = _model_module_for_kind(kind)
-    return mod.as_class(source)
 
 def _model_export(path, model):
     kind = _detect_model_object_kind(model)
@@ -86,7 +65,7 @@ class ModelSpecifier(argparse.Action):
             leading_value = None
             rest = []
 
-        resolution = _resolve_model(_model_class_from_path_fn, leading_value, rest)
+        resolution = _resolve_model(leading_value, rest)
 
         setattr(namespace, self.dest, resolution['model'])
         setattr(namespace, "%s_can_refresh" % self.dest, resolution.get('can_refresh', None))
@@ -157,7 +136,7 @@ def run(argns, remaining_args):
             serve_deferred(
                     host=host, port=port,
                     prefork_ok=prefork_ok,
-                    model_class_from_path_fn=argns.model_class_from_path_fn,
+                    model_class_from_path_fn=_model_class_from_path_fn,
                     extra_scripts=segment_js)
         else:
             if _detect_model_object_kind(model) == 'tensorflow':
@@ -186,41 +165,10 @@ def run(argns, remaining_args):
         if not argns.specifier_can_refresh:
             print("WARN: Can't watch unrefreshable model.")
         else:
-            import pywatchman
-            import threading
-            import time
-            import traceback
-
-            def run_client():
-                with pywatchman.client() as c:
-                    specifier_dir, specifier_base = os.path.split(argns.specifier_source)
-                    subscription_name = 'mysubscription'
-                    c.query('subscribe', specifier_dir, subscription_name, {
-                        "expression": ["allof", ["match", specifier_base]],
-                        "fields": ["name", "size", "mtime_ms", "exists", "type", "content.sha1hex"],
-                    })
-                    last_sha = argns.specifier_source_sha1hex
-                    while True:
-                        try:
-                            c.receive()
-                            for e in c.getSubscription(subscription_name):
-                                for f in e['files']:
-                                    if f['name'] != specifier_base:
-                                        continue
-
-                                    sha = f['content.sha1hex']
-                                    if last_sha != sha:
-                                        try:
-                                            argns.specifier_refresh_fn()
-                                        except:
-                                            traceback.print_exc()
-
-                                        last_sha = sha
-
-                        except pywatchman.SocketTimeout:
-                            time.sleep(.1)
-
-            threading.Thread(target=run_client, daemon=True).start()
+            import tfi.watch
+            ar = tfi.watch.AutoRefresher()
+            ar.watch(argns.specifier_source, argns.specifier_source_sha1hex, argns.specifier_refresh_fn)
+            ar.start()
 
     if argns.interactive:
         from tfi.repl import run as run_repl
