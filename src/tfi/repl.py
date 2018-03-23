@@ -107,15 +107,27 @@ def _configure_repl(repl):
 
     repl._execute = partial(_execute, repl)
 
-def run(globals=None, locals=None, history_filename=None, model=None):
+def run(globals=None, locals=None, history_filename=None, model=None, module=None):
     g = dict(globals)
+    if module is not None:
+        g['module'] = module
+
     if model is not None:
         g['m'] = model
-        print("Added model to environment as m")
-        for n, m in inspect.getmembers(model, predicate=inspect.ismethod):
+
+        # Print hyperparameters and model methods
+        ctorargs = "..."
+        if hasattr(model, '__tfi_hyperparameters__'):
+            ctorargs = ", ".join(["%s=%s" % (k, v) for k, v in model.__tfi_hyperparameters_dict__().items()])
+        print("Initializing environment...")
+        print("m = %s(%s)" % (model.__class__.__name__, ctorargs))
+        methods = inspect.getmembers(model, predicate=inspect.ismethod)
+        for i, (n, m) in enumerate(methods):
             if n.startswith('_'):
                 continue
-            print("m.%s(%s)" % (n, ", ".join(inspect.signature(m).parameters.keys())))
+            leading = "└" if i == len(methods) - 1 else "├"
+            print("%s m.%s(%s)" % (leading, n, ", ".join(inspect.signature(m).parameters.keys())))
+        print()
     embed(g, locals,
           configure=_configure_repl,
           history_filename=history_filename)

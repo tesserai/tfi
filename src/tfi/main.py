@@ -68,6 +68,7 @@ class ModelSpecifier(argparse.Action):
         resolution = _resolve_model(leading_value, rest)
 
         setattr(namespace, self.dest, resolution['model'])
+        setattr(namespace, "%s_module_fn" % self.dest, resolution.get('module_fn', lambda x: None))
         setattr(namespace, "%s_can_refresh" % self.dest, resolution.get('can_refresh', None))
         setattr(namespace, "%s_refresh_fn" % self.dest, resolution.get('refresh_fn', None))
         setattr(namespace, "%s_method_fn" % self.dest, resolution['model_method_fn'])
@@ -96,6 +97,7 @@ parser.add_argument('specifier', type=str, default=None, nargs=argparse.REMAINDE
 
 def run(argns, remaining_args):
     model = None
+    module = None
     exporting = argns.export is not None or argns.export_doc is not None
     serving = argns.serve is not False
     publishing = argns.publish is not False
@@ -103,6 +105,7 @@ def run(argns, remaining_args):
 
     if argns.specifier:
         model = argns.specifier
+        module = argns.specifier_module_fn()
 
         if argns.specifier_method_fn:
             result = argns.specifier_method_fn()
@@ -167,7 +170,11 @@ def run(argns, remaining_args):
         else:
             import tfi.watch
             ar = tfi.watch.AutoRefresher()
-            ar.watch(argns.specifier_source, argns.specifier_source_sha1hex, argns.specifier_refresh_fn)
+            def do_refresh():
+                def refresh_progress(model, ix, total):
+                    print("Refreshing %d/%d: %s" % (ix, total, model))
+                argns.specifier_refresh_fn(refresh_progress)
+            ar.watch(argns.specifier_source, argns.specifier_source_sha1hex, do_refresh)
             ar.start()
 
     if argns.interactive:
@@ -176,7 +183,8 @@ def run(argns, remaining_args):
                 globals=globals(),
                 locals=None,
                 history_filename=os.path.expanduser('~/.tfihistory'),
-                model=model)
+                model=model,
+                module=module)
 
     if argns.export_doc:
         tfi.doc.save(argns.export_doc, model)

@@ -9,6 +9,7 @@ import functools
 import os
 import re
 import sys
+import threading
 import types
 import warnings
 
@@ -424,6 +425,8 @@ class Meta(type):
                 del d[name]
             del d['__tfi_del__']
 
+        d['__tfi_refresh_watchers__'] = []
+
         if '__init__' in d:
             init = d['__init__']
             # Wrap __init__ to graph, session, and methods.
@@ -458,6 +461,9 @@ class Meta(type):
                 self.__tfi_graph__ = graph
                 self.__tfi_session__ = None
 
+                if not hasattr(self, '__tfi_refresh_conditions__'):
+                    self.__tfi_refresh_conditions__ = _ConditionGenerator()
+
                 with graph.as_default():
                     init(self, *a, **k)
 
@@ -491,6 +497,9 @@ class Meta(type):
                             output_tensor_shapes, output_tensor_shape_labels = self.__tfi_signature_def_shapes__.get(method_name, ((), ()))
                             method = _make_method(self, sigdef, output_tensor_shapes, output_tensor_shape_labels, method_vars)
                             setattr(self, method_name, method)
+
+                for fn in self.__tfi_refresh_watchers__:
+                    fn(self)
 
             if hasattr(init, '__doc__'):
                 wrapped_init.__doc__ = init.__doc__
@@ -536,6 +545,21 @@ class Meta(type):
         d['__tfi_del__'] = list(d.keys())
 
         return d
+
+class _ConditionGenerator(object):
+    def __init__(self):
+        self._c = threading.Condition()
+
+    def notify_all(self):
+        with self._c:
+            self._c.notify_all()
+
+    def whenever(self):
+        while True:
+            yield
+
+            with self._c:
+                self._c.wait()
 
 class Base(object, metaclass=Meta):
     def __tfi_get_session__(self):
@@ -597,6 +621,10 @@ class Base(object, metaclass=Meta):
             for (name, _, val, _) in self.__tfi_hyperparameters__
         }
 
+    def __tfi_refreshes__(self):
+        for _ in self.__tfi_refresh_conditions__.whenever():
+            yield
+
     def __tfi_refresh__(self):
         if not hasattr(self, '__tfi_hyperparameters__'):
             return
@@ -607,7 +635,7 @@ class Base(object, metaclass=Meta):
         # Delete everything that might accidentally pollute our new version, but keep a backup.
         backup = dict(self.__dict__)
         for attr in backup.keys():
-            if attr in ['__tfi_hyperparameters__', '__tfi_vars_initialized__']:
+            if attr in ['__tfi_hyperparameters__', '__tfi_vars_initialized__', '__tfi_refresh_conditions__']:
                 continue
             delattr(self, attr)
 
@@ -635,6 +663,9 @@ class Base(object, metaclass=Meta):
         if previous_session:
             previous_session.close()
 
+        # Notify anyone waiting for refreshes of this model.
+        self.__tfi_refresh_conditions__.notify_all()
+
 def as_class(saved_model_dir, tag_set=tf.saved_model.tag_constants.SERVING):
     from tensorflow.contrib.saved_model.python.saved_model import reader
     from tensorflow.python.saved_model import loader
@@ -658,6 +689,7 @@ def as_class(saved_model_dir, tag_set=tf.saved_model.tag_constants.SERVING):
                 signature_defs,
         '__tfi_estimator_modes__': {},
         '__tfi_signature_def_shapes__': {},
+        '__tfi_refresh_conditions__': _ConditionGenerator(),
     })
 
 def export(export_path, model):
@@ -757,6 +789,8 @@ def as_estimator(model_or_class, model_dir=None):
 
             call_args = [i]
             call_kwargs = {}
+            if isinstance(features, tfi.tensor.frame.TensorFrame):
+                features = features.dict()
             if isinstance(features, dict):
                 for k, v in features.items():
                     call_kwargs[k] = v
@@ -765,6 +799,8 @@ def as_estimator(model_or_class, model_dir=None):
             else:
                 call_kwargs['features'] = features
 
+            if isinstance(labels, tfi.tensor.frame.TensorFrame):
+                labels = labels.dict()
             if isinstance(labels, dict):
                 for k, v in labels.items():
                     call_kwargs[k] = v

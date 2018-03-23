@@ -14,6 +14,9 @@ class TensorFrame(object):
                 ready[name] = tensor.item()
                 continue
             dimname = shape[0]
+            if dimname is None:
+                ready[name] = tensor
+                continue
             if dimname not in willzip:
                 willzip[dimname] = []
                 lengths[dimname] = tensor.shape[0]
@@ -62,6 +65,9 @@ class TensorFrame(object):
     def __getitem__(self, ix):
         return self._data_dict[ix]
 
+    def dict(self):
+        return self._data_dict
+
     def shapes(self):
         return self._shape_dict
 
@@ -85,3 +91,6 @@ class TensorFrame(object):
         if not dictclass:
             dictclass = dict
         return TensorFrame._zip(data, self._shape_labels, dictclass)
+
+    # def __repr__(self):
+    #     return self.zipped().__repr__()

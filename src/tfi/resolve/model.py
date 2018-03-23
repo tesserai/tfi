@@ -30,17 +30,66 @@ def _parse_python_str_constants(source):
     nv.visit(parsed)
     return constants
 
-def _reify(resolution):
-    init_rest = resolution.get('init_rest', [])
-    loaded_fn = resolution.get('loaded_fn', None)
+class _module_proxy(object):
+    def __init__(self, target):
+        self._target = target
 
+    def __getattr__(self, name):
+        return getattr(self._target, name)
+
+def _reify(resolution):
+    module_fn = resolution.get('module_fn', None)
+    loaded_fn = resolution.get('loaded_fn', None)
+    reset_module_fn = resolution.get('reset_module_fn', None)
+
+    module_proxy = _module_proxy(module_fn())
+
+    models = weakref.WeakSet()
+
+    can_refresh = resolution['can_refresh']
+    def watch_module_classes(module):
+        if not can_refresh:
+            return
+
+        for _, member in inspect.getmembers(module, inspect.isclass):
+            if hasattr(member, '__tfi_refresh_watchers__'):
+                member.__tfi_refresh_watchers__.append(models.add)
+
+    def refresh_model(progress_fn=None):
+        if not progress_fn:
+            progress_fn = lambda model, ix, total: None
+
+        reset_module_fn()
+        module = module_fn()
+        watch_module_classes(module)
+        module_proxy._target = module_fn()
+
+        total = len(models)
+        for i, model in enumerate(models):
+            reloaded = getattr(module, model.__class__.__name__)
+            progress_fn(model, i, total)
+            previous_class = model.__class__
+            try:
+                model.__class__ = reloaded
+                if hasattr(model, '__tfi_refresh__'):
+                    model.__tfi_refresh__()
+            except:
+                model.__class__ = previous_class
+                raise
+        progress_fn(None, total, total)
+
+    if can_refresh:
+        resolution['refresh_fn'] = refresh_model
+        resolution['module_fn'] = lambda: module_proxy
+
+    init_rest = resolution.get('init_rest', [])
     init = {}
     if init_rest:
         init = eval("dict(%s" % init_rest[0])
 
+    watch_module_classes(module_fn())
     loaded = loaded_fn()
-    is_loaded_a_class = False
-    
+
     if callable(loaded):
         sig = inspect.signature(loaded)
         needed_params = OrderedDict(sig.parameters.items())
@@ -50,7 +99,6 @@ def _reify(resolution):
         members = []
         if isinstance(loaded, type):
             members = inspect.getmembers(loaded, inspect.isfunction)
-            is_loaded_a_class = True
         model_fn = partial(loaded, **init)
     else:
         members = inspect.getmembers(loaded, inspect.ismethod)
@@ -59,37 +107,10 @@ def _reify(resolution):
 
     members = [(k, v) for (k, v) in members if not k.startswith('_')]
 
-    if resolution['can_refresh'] and is_loaded_a_class:
-        models = weakref.WeakSet()
-        orig_model_fn = model_fn
-
-        def _wrapped_model_fn(*a, **kw):
-            model = orig_model_fn(*a, **kw)
-            # TODO(adamb) Should actually use weak references to avoid a memory leak!
-
-            models.add(model)
-            return model
-        model_fn = _wrapped_model_fn
-
-        def refresh_model():
-            reloaded = loaded_fn()
-            for model in models:
-                previous_class = model.__class__
-                try:
-                    model.__class__ = reloaded
-                    print("Replacing __class__", model, id(reloaded), reloaded)
-                    if hasattr(model, '__tfi_refresh__'):
-                        model.__tfi_refresh__()
-                except:
-                    model.__class__ = previous_class
-                    raise
-
-        resolution['refresh_fn'] = refresh_model
-
     resolution['model_fn_needed_params'] = needed_params
     resolution['model_members'] = members
     resolution['model_fn'] = model_fn
-    
+
     return resolution
 
 def _detect_model_file_kind(file):
@@ -215,7 +236,7 @@ def resolve_python_source(leading_value):
     module_name = source.replace('/', '.')
     source = os.path.abspath(source + ".py")
 
-    def module():
+    def load_module():
         with open(source) as f:
             constants = _parse_python_str_constants(f.read())
             if '__tfi_conda_environment_yaml__' in constants:
@@ -228,12 +249,24 @@ def resolve_python_source(leading_value):
         m.update(f.read())
         sha1hex = m.hexdigest()
 
+    mod = None
+    def module():
+        nonlocal mod
+        if mod is None:
+            mod = load_module()
+        return mod
+
+    def reset_module():
+        nonlocal mod
+        mod = None
+
     return _reify({
         'source': source,
         'source_sha1hex': sha1hex,
         'classname': classname,
         'module_fn': module,
         'loaded_fn': lambda: getattr(module(), classname),
+        'reset_module_fn': reset_module,
         'via_python': True,
         'init_rest': init_rest,
         'can_refresh': True,
@@ -244,13 +277,26 @@ def resolve_module(leading_value):
     pre_initargs, *init_rest = leading_value.split("(", 1)
     *module_fragments, classname = pre_initargs.split(".")
     module_name = ".".join(module_fragments)
-    def module():
+    def load_module():
         return importlib.import_module(module_name)
+
+    mod = None
+    def module():
+        nonlocal mod
+        if mod is None:
+            mod = load_module()
+        return mod
+
+    def reset_module():
+        nonlocal mod
+        mod = None
+
     return _reify({
         'source': source,
         'classname': classname,
         'loaded_fn': lambda: getattr(module(), classname),
         'module_fn': module,
+        'reset_module_fn': reset_module,
         'via_python': True,
         'init_rest': init_rest,
         'can_refresh': True,

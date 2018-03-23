@@ -22,49 +22,49 @@ _excepthook = _shadow(*sys.path)
 
 class AutoRefresher(object):
     def __init__(self):
-        self.client = None
-        self.lock = threading.RLock()
-        self.subscriptions = {} # subscription_name -> [basename, sha, refresh_fns]
-        self.towatch = []
+        self._client = None
+        self._lock = threading.RLock()
+        self._subscriptions = {} # subscription_name -> [basename, sha, refresh_fns]
+        self._pending_watchargs = []
 
     def watch(self, source_path, initial_sha1hex, refresh_fn):
-        with self.lock:
-            if not self.client:
-                self.towatch.append((source_path, initial_sha1hex, refresh_fn))
+        with self._lock:
+            if not self._client:
+                self._pending_watchargs.append((source_path, initial_sha1hex, refresh_fn))
             else:
                 self._watch(source_path, initial_sha1hex, refresh_fn)
 
     def _watch(self, source_path, initial_sha1hex, refresh_fn):
         subscription_name = source_path
 
-        if subscription_name in self.subscriptions:
-            self.subscriptions[subscription_name][2].append(refresh_fn)
+        if subscription_name in self._subscriptions:
+            self._subscriptions[subscription_name][2].append(refresh_fn)
             return
 
         parentdir, basename = os.path.split(source_path)
-        self.client.query('subscribe', parentdir, subscription_name, {
+        self._client.query('subscribe', parentdir, subscription_name, {
             "expression": ["allof", ["match", basename]],
             "fields": ["name", "size", "mtime_ms", "exists", "type", "content.sha1hex"],
         })
 
-        self.subscriptions[subscription_name] = [basename, initial_sha1hex, [refresh_fn]]
+        self._subscriptions[subscription_name] = [basename, initial_sha1hex, [refresh_fn]]
 
     def _run(self):
         with pywatchman.client() as c:
-            with self.lock:
-                self.client = c
+            with self._lock:
+                self._client = c
                 c.setTimeout(1)
-                for entry in self.towatch:
+                for entry in self._pending_watchargs:
                     self._watch(*entry)
-                self.towatch.clear()
+                self._pending_watchargs.clear()
 
             while True:
                 try:
                     # Wait for subscription events
-                    with self.lock:
+                    with self._lock:
                         c.receive()
                     # print("receive")
-                    for subscription_name, entry in self.subscriptions.items():
+                    for subscription_name, entry in self._subscriptions.items():
                         basename, last_sha, refresh_fns = entry
                         events = c.getSubscription(subscription_name)
                         # print("events", events)
