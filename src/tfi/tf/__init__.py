@@ -12,6 +12,7 @@ import sys
 import threading
 import types
 import warnings
+import datetime
 
 import tensorflow as tf
 import numpy as np
@@ -20,6 +21,7 @@ from tensorflow.python.client import session
 from tensorflow.python.debug.wrappers import local_cli_wrapper
 from tensorflow.python.framework import ops as ops_lib
 
+import re
 from tfi.base import _GetAttrAccumulator
 
 from tfi.parse.docstring import GoogleDocstring
@@ -562,6 +564,10 @@ class _ConditionGenerator(object):
                 self._c.wait()
 
 class Base(object, metaclass=Meta):
+    def __tfi_get_session_logdir__(self, *args, **kwargs):
+        self.__tfi_get_session__()
+        return self.__tfi_session_logdir_fn__(*args, **kwargs)
+    
     def __tfi_get_session__(self):
         if not self.__tfi_session__:
             graph = self.__tfi_graph__
@@ -571,7 +577,11 @@ class Base(object, metaclass=Meta):
                 log_device_placement=False,
                 gpu_options={'allow_growth': True},
             )
-            self.__tfi_session__ = tf.Session(graph=graph, config=config)
+            self.__tfi_session_logdir_fn__ = tfi.tf_make_logdir_fn(datetime.datetime.now())
+            self.__tfi_session__ = tf.Session(
+                graph=graph,
+                config=config,
+            )
         return self.__tfi_session__
 
     def __tfi_save_initialized_vars__(self, dir):
@@ -629,13 +639,18 @@ class Base(object, metaclass=Meta):
         if not hasattr(self, '__tfi_hyperparameters__'):
             return
 
-        previous_init_var_names, previous_saved_prefix = self.__tfi_save_initialized_vars__('/tmp/tf-saving')
+        logdir = os.path.join(self.__tfi_get_session_logdir__(), 'refresh')
+        previous_init_var_names, previous_saved_prefix = self.__tfi_save_initialized_vars__(logdir)
         previous_session = self.__tfi_session__
 
         # Delete everything that might accidentally pollute our new version, but keep a backup.
         backup = dict(self.__dict__)
         for attr in backup.keys():
-            if attr in ['__tfi_hyperparameters__', '__tfi_vars_initialized__', '__tfi_refresh_conditions__']:
+            if attr in [
+                '__tfi_hyperparameters__',
+                '__tfi_vars_initialized__',
+                '__tfi_refresh_conditions__',
+            ]:
                 continue
             delattr(self, attr)
 
@@ -827,11 +842,17 @@ def as_estimator(model_or_class, model_dir=None):
         return model_fn
 
     def _make_estimator_from_instance(instance):
-        saved_vars, saved_prefix = instance.__tfi_save_initialized_vars__('/tmp/tf-estimatorz')
-        warm_start_from = tf.estimator.WarmStartSettings(saved_prefix) if saved_prefix else None
+        logdir = os.path.join(instance.__tfi_get_session_logdir__(), 'estimator')
+
+        saved_var_names, saved_prefix = instance.__tfi_save_initialized_vars__(logdir)
+        warm_start_from = None
+        if saved_prefix:
+            warm_start_from = tf.estimator.WarmStartSettings(
+                saved_prefix,
+                vars_to_warm_start=re.compile("|".join([re.escape(var_name) for var_name in saved_var_names])))
 
         config = tf.estimator.RunConfig(
-            model_dir=model_dir,
+            model_dir=model_dir or logdir,
             tf_random_seed=None,
             session_config=None,
             keep_checkpoint_max=5,

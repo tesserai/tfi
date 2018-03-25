@@ -1,21 +1,22 @@
+import numpy as np
 from collections import OrderedDict
 
 class TensorFrame(object):
     @staticmethod
-    def _zip(data, dimlabels, dictclass):
+    def _zip(data, dimlabels, value_fn, dictclass):
         ready = dictclass() # Post-zip
         willzip = OrderedDict()
         lengths = {}
         for shape, name, tensor in data:
             if shape is None or shape == (...,):
-                ready[name] = tensor
+                ready[name] = value_fn(tensor)
                 continue
             if len(shape) == 0: # Scalars can't be zipped, they're ready as-is.
-                ready[name] = tensor.item()
+                ready[name] = value_fn(tensor.item())
                 continue
             dimname = shape[0]
             if dimname is None:
-                ready[name] = tensor
+                ready[name] = value_fn(tensor)
                 continue
             if dimname not in willzip:
                 willzip[dimname] = []
@@ -33,6 +34,7 @@ class TensorFrame(object):
                         for shape, name, tensor in nested
                     ],
                     dimlabels,
+                    value_fn,
                     dictclass,
                 )
                 for ix in range(lengths[dimname])
@@ -80,7 +82,19 @@ class TensorFrame(object):
     def keys(self):
         return self._data_dict.keys()
 
-    def zipped(self, *, filter=None, dictclass=None):
+    def zipped(self, *, filter=None, jsonable=False, dictclass=None):
+        if jsonable:
+            def value_fn(x):
+                if isinstance(x, np.ndarray):
+                    if x.dtype == object:
+                        return [value_fn(e) for e in x.tolist()]
+                    return x.tolist()
+                if isinstance(x, bytes):
+                    return x.decode('utf-8')
+                return x
+        else:
+            def value_fn(x): return x
+
         data = self._data
         if filter:
             data = [
@@ -88,9 +102,11 @@ class TensorFrame(object):
                 for shape, name, tensor in self._data
                 if name in filter or next((True for k, v in self._shape_labels.items() if v in filter and k in shape), False)
             ]
+
         if not dictclass:
             dictclass = dict
-        return TensorFrame._zip(data, self._shape_labels, dictclass)
+
+        return TensorFrame._zip(data, self._shape_labels, value_fn=value_fn, dictclass=dictclass)
 
     # def __repr__(self):
     #     return self.zipped().__repr__()

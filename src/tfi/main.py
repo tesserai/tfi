@@ -22,6 +22,7 @@ from tfi.format.iterm2 import imgcat as _tfi_format_iterm2_imgcat
 
 from collections import OrderedDict
 from functools import partial
+from itertools import takewhile
 
 def _detect_model_object_kind(model):
     klass = model if isinstance(model, type) else type(model)
@@ -81,11 +82,16 @@ parser = argparse.ArgumentParser(prog='tfi', add_help=False)
 parser.add_argument('--serve', default=False, action='store_true', help='Start REST API on given port')
 parser.add_argument('--internal-config', type=str, help='For internal use.')
 parser.add_argument('--publish', default=False, action='store_true', help='Publish model')
-parser.add_argument('--bind', type=str, default='127.0.0.1:5000', help='Set address:port to serve on')
+parser.add_argument('--bind', type=str, default='127.0.0.1:5000', help='Set address:port to serve model on')
 parser.add_argument('--export', type=str, help='path to export to')
 parser.add_argument('--export-doc', type=str, help='path to export doc to')
 parser.add_argument('--watch', default=False, action='store_true', help='Watch given model and reload when it changes')
 parser.add_argument('--interactive', '-i', default=None, action='store_true', help='Start interactive session')
+parser.add_argument('--tf-tensorboard-bind-default', type=str, default='127.0.0.1:6007')
+parser.add_argument('--tf-tensorboard-bind', type=str, help='Set address:port to serve TensorBoard on. Default behavior is 127.0.0.1:6007 if available, otherwise 127.0.0.1:0')
+parser.add_argument('--tf-logdir',
+        default=os.path.expanduser('~/.tfi/tf/log/%F_%H-%M-%S/%04i'),
+        help='Set TensorFlow log dir to write to. Renders any % placeholders with strftime, runs TensorBoard from parent dir. %04i is replaced by a 0-padded run_id count')
 parser.add_argument('specifier', type=str, default=None, nargs=argparse.REMAINDER, action=ModelSpecifier, help='fully qualified class name to instantiate')
 
 
@@ -102,6 +108,22 @@ def run(argns, remaining_args):
     serving = argns.serve is not False
     publishing = argns.publish is not False
     batch = False
+    if argns.interactive is None:
+        argns.interactive = not batch and not exporting and not serving and not publishing
+
+    def tf_make_logdir_fn(datetime):
+        import re
+        base_logdir = datetime.strftime(argns.tf_logdir)
+
+        def logdir_fn(run_id=None):
+            if run_id is None:
+                return re.sub('(%\d*)i', '', base_logdir)
+
+            base_logdir_formatstr = re.sub('(%\d*)i', '\\1d', base_logdir)
+            return base_logdir_formatstr % run_id
+        return logdir_fn
+    import tfi
+    tfi.tf_make_logdir_fn = tf_make_logdir_fn
 
     if argns.specifier:
         model = argns.specifier
@@ -118,6 +140,46 @@ def run(argns, remaining_args):
             print(result_str)
             batch = True
 
+    internal_config = argns.internal_config or (model and _detect_model_object_kind(model))
+
+    tensorboard = internal_config == 'tensorflow' and (serving or argns.interactive)
+    if tensorboard:
+        import tfi.tf.tensorboard_server
+        import threading
+        tb_logdir = argns.tf_logdir
+        while '%' in tb_logdir:
+            tb_logdir = os.path.dirname(tb_logdir)
+
+        if argns.tf_tensorboard_bind:
+            tb_host, tb_port = argns.tf_tensorboard_bind.split(':', 1)
+            tb_port = int(tb_port)
+        else:
+            tb_host, tb_port = argns.tf_tensorboard_bind_default.split(':', 1)
+            tb_port = int(tb_port)
+
+            import socket
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                try:
+                    s.bind((tb_host, tb_port))
+                except socket.error as e:
+                    if e.errno == 98:
+                        tb_port = 0
+
+        tb_cv = threading.Condition()
+        def tb_run():
+            def on_ready_fn(url):
+                if url:
+                    print('TensorBoard at %s now serving %s' % (url, tb_logdir))
+                    sys.stdout.flush()
+                with tb_cv:
+                    tb_cv.notify_all()
+            tfi.tf.tensorboard_server.main(tb_logdir, tb_host=tb_host, tb_port=tb_port, tb_on_ready_fn=on_ready_fn)
+
+        with tb_cv:
+            tb_thread = threading.Thread(target=tb_run, daemon=True)
+            tb_thread.start()
+            tb_cv.wait()
+
     if serving:
         segment_js = """
 <script>
@@ -132,7 +194,7 @@ def run(argns, remaining_args):
         prefork_ok = True
         port = int(port)
         if model is None:
-            if argns.internal_config == 'tensorflow':
+            if internal_config == 'tensorflow':
                 prefork_ok = False
 
             from tfi.serve import run_deferred as serve_deferred
@@ -142,7 +204,7 @@ def run(argns, remaining_args):
                     model_class_from_path_fn=_model_class_from_path_fn,
                     extra_scripts=segment_js)
         else:
-            if _detect_model_object_kind(model) == 'tensorflow':
+            if internal_config == 'tensorflow':
                 prefork_ok = False
 
             from tfi.serve import run as serve
@@ -160,9 +222,6 @@ def run(argns, remaining_args):
                     prefork_ok=prefork_ok,
                     extra_scripts=segment_js,
                     model_file_fn=model_file_fn)
-
-    if argns.interactive is None:
-        argns.interactive = not batch and not exporting and not serving and not publishing
 
     if argns.watch:
         if not argns.specifier_can_refresh:
