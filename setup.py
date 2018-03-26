@@ -30,15 +30,15 @@ INSTALL_REQUIRES = [
 ]
 EXTRAS_REQUIRE = {
     "tensorflow": [
-        "tensorflow>=1.6.0rc1",
         "numpy",
+        "tensorflow>=1.6.0rc1",
     ],
     "pytorch": [
+        "cloudpickle",
         "pytorch",
         "torchvision",
     ],
     "serve": [
-        "cloudpickle",
         "requests",
         "Flask",
         "gunicorn",
@@ -104,4 +104,5 @@ if __name__ == "__main__":
         classifiers=CLASSIFIERS,
         install_requires=INSTALL_REQUIRES,
         extras_require=EXTRAS_REQUIRE,
+        include_package_data=True,
     )

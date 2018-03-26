@@ -76,6 +76,9 @@ class TensorFrame(object):
     def shape_labels(self):
         return self._shape_labels
 
+    def tuples(self):
+        return self._data
+
     def items(self):
         return self._data_dict.items()
 

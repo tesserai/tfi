@@ -113,10 +113,23 @@ def _reify(resolution):
 
     return resolution
 
+import mimetypes
+import zipfile
+
+_tensorflow_marker_file = 'saved_model.pb'
 def _detect_model_file_kind(file):
-    if os.path.isdir(file):
+    if os.path.isdir(file) and os.path.exists(os.path.join(file, _tensorflow_marker_file)):
         # It's a SavedModel!
         return "tensorflow"
+
+    if zipfile.is_zipfile(file):
+        with zipfile.ZipFile(file) as zipf:
+            try:
+                zipf.getinfo(_tensorflow_marker_file)
+                return "tensorflow"
+            except KeyError:
+                print("didn't find info")
+                pass
 
     # Assume it's a PyTorch model!
     return "pytorch"
@@ -130,15 +143,16 @@ def _model_module_for_kind(kind):
         return tfi.tf
     raise Exception("Can't detect model module %s" % model)
 
-def _model_class_from_path_fn(source):
+def _load_model_from_path_fn(source):
     kind = _detect_model_file_kind(source)
     mod = _model_module_for_kind(kind)
-    return mod.as_class(source)
+    return mod.load(source)
 
 def resolve_exported(leading_value):
     return _reify({
         'source': os.path.abspath(leading_value),
         'loaded_fn': lambda: _model_class_from_path_fn(leading_value),
+        'module_fn': lambda: None,
         'can_refresh': False,
     })
 

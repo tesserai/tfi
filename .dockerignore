@@ -7,3 +7,4 @@ venv/
 zoo/
 *.tfi
 __pycache__
+.git

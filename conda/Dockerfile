@@ -20,9 +20,9 @@ RUN apt-get update && apt-get install -y \
 
 # Download and create
 RUN wget --quiet \
-    https://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh && \
-    bash Miniconda-latest-Linux-x86_64.sh -b -p $CONDA_ENV_PATH && \
-    rm Miniconda-latest-Linux-x86_64.sh && \
+    https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
+    bash Miniconda3-latest-Linux-x86_64.sh -b -p $CONDA_ENV_PATH && \
+    rm Miniconda3-latest-Linux-x86_64.sh && \
     chmod -R a+rx $CONDA_ENV_PATH
 ENV PATH $CONDA_ENV_PATH/bin:$PATH
 
@@ -34,17 +34,16 @@ ADD conda/$CONDA_ENV_NAME.yml /tmp/environment.yml
 WORKDIR /tmp
 RUN ["conda", "env", "create"]
 
-ADD conda/entrypoint.sh $CONDA_ENV_PATH/bin/entrypoint.sh
-ADD src /code/src
+COPY . /code/tfi
+RUN pip install /code/tfi[${CONDA_ENV_NAME},serve]
 
 ENV PYTHONUNBUFFERED 1
-ENV PYTHONPATH /code/src
-ENV PATH /code/src/tfi:$PATH
 
 WORKDIR /code
 # RUN useradd -m srv
 # USER srv
 
+ADD conda/entrypoint.sh $CONDA_ENV_PATH/bin/entrypoint.sh
 ENV CONDA_ENV_NAME ${CONDA_ENV_NAME}
 ENTRYPOINT ["entrypoint.sh"]
-CMD ["--bind=0.0.0.0:8888", "--serve", "--internal-config=${CONDA_ENV_NAME}"]
+CMD ["--bind=0.0.0.0:8888", "--serve"]

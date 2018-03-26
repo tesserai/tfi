@@ -1,0 +1,19 @@
+name: tensorflow
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.6
+  - numpy==1.14.2
+  - pip:
+    - requests==2.14.2
+    - Flask==0.12.2
+    - Werkzeug
+    - gunicorn==19.7.1
+    - tinydb
+    - yapf
+    - docutils
+    - beautifulsoup4
+    - tensorflow>=1.6.0rc1
+    - tensorboard
+    - ptpython

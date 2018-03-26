@@ -15,7 +15,7 @@ import tempfile
 
 import tfi
 
-from tfi.resolve.model import _detect_model_file_kind, _model_module_for_kind, _model_class_from_path_fn
+from tfi.resolve.model import _detect_model_file_kind, _model_module_for_kind, _load_model_from_path_fn
 from tfi.cli import resolve as _resolve_model
 from tfi.tensor.codec import encode as _tfi_tensor_codec_encode
 from tfi.format.iterm2 import imgcat as _tfi_format_iterm2_imgcat
@@ -80,7 +80,7 @@ class ModelSpecifier(argparse.Action):
 
 parser = argparse.ArgumentParser(prog='tfi', add_help=False)
 parser.add_argument('--serve', default=False, action='store_true', help='Start REST API on given port')
-parser.add_argument('--internal-config', type=str, help='For internal use.')
+parser.add_argument('--internal-config', type=str, default=os.environ.get("TFI_INTERNAL_CONFIG", ""), help='For internal use.')
 parser.add_argument('--publish', default=False, action='store_true', help='Publish model')
 parser.add_argument('--bind', type=str, default='127.0.0.1:5000', help='Set address:port to serve model on')
 parser.add_argument('--export', type=str, help='path to export to')
@@ -142,7 +142,7 @@ def run(argns, remaining_args):
 
     internal_config = argns.internal_config or (model and _detect_model_object_kind(model))
 
-    tensorboard = internal_config == 'tensorflow' and (serving or argns.interactive)
+    tensorboard = internal_config == 'tensorflow' and argns.interactive
     if tensorboard:
         import tfi.tf.tensorboard_server
         import threading
@@ -165,6 +165,7 @@ def run(argns, remaining_args):
                     if e.errno == 98:
                         tb_port = 0
 
+        # Use some fancy footwork to delay continuing until TensorBoard has started.
         tb_cv = threading.Condition()
         def tb_run():
             def on_ready_fn(url):
@@ -201,7 +202,7 @@ def run(argns, remaining_args):
             serve_deferred(
                     host=host, port=port,
                     prefork_ok=prefork_ok,
-                    model_class_from_path_fn=_model_class_from_path_fn,
+                    load_model_from_path_fn=_load_model_from_path_fn,
                     extra_scripts=segment_js)
         else:
             if internal_config == 'tensorflow':
@@ -271,7 +272,7 @@ def run(argns, remaining_args):
 
 def main():
     argns, remaining_args = parser.parse_known_args(sys.argv[1:])
-    argns.model_class_from_path_fn = _model_class_from_path_fn
+    argns.load_model_from_path_fn = _load_model_from_path_fn
     run(argns, remaining_args)
 
 if __name__ == '__main__':

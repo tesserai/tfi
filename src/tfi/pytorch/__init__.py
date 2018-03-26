@@ -210,13 +210,17 @@ from tfi.pytorch.load import persistent_load
 from tfi.pytorch import kosher as _kosher
 from tfi.doc import record_documentation
 
-def export(export_path, model):
+def dump(export_path, model):
     record_documentation(model)
     pickle_module = _kosher.PickleModule(lambda m: m.startswith('zoo.'))
     pickle_module.persistent_load = persistent_load
     with open(export_path, "w+b") as f:
         torch.save(model, f, pickle_module=pickle_module)
 
-def as_class(import_path):
+def load(import_path):
     with open(import_path, "rb") as f:
         return torch.load(f, pickle_module=_kosher.PickleModule(lambda x: False))
+
+# Compatibility
+export = dump
+as_class = load

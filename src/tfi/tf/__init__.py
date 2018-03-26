@@ -681,7 +681,7 @@ class Base(object, metaclass=Meta):
         # Notify anyone waiting for refreshes of this model.
         self.__tfi_refresh_conditions__.notify_all()
 
-def as_class(saved_model_dir, tag_set=tf.saved_model.tag_constants.SERVING):
+def as_class(saved_model_path, tag_set=tf.saved_model.tag_constants.SERVING):
     from tensorflow.contrib.saved_model.python.saved_model import reader
     from tensorflow.python.saved_model import loader
 
@@ -695,19 +695,47 @@ def as_class(saved_model_dir, tag_set=tf.saved_model.tag_constants.SERVING):
       raise RuntimeError('MetaGraphDef associated with tag-set ' + tag_set +
                          ' could not be found in SavedModel')
 
+    def _read_signature_defs(saved_model_dir):
+        return _get_meta_graph_def(saved_model_dir, tag_set).signature_def
+
+    tempdirs = []
+    if os.path.isdir(saved_model_path):
+        saved_model_dir = saved_model_path
+    else:
+        import tempfile
+        import zipfile
+        tempdir = tempfile.TemporaryDirectory()
+        saved_model_dir = tempdir.name
+        tempdirs.append(tempdir)
+        with zipfile.ZipFile(saved_model_path) as zipf:
+            # print("extracting", zipf.namelist(), "to", saved_model_dir)
+            zipf.extractall(saved_model_dir)
+
+    signature_defs = _read_signature_defs(saved_model_dir)
+
     # TODO(adamb) Choose a better name than CUSTOMTYPE.
-    signature_defs = _get_meta_graph_def(saved_model_dir, tag_set).signature_def
     return type('CUSTOMTYPE', (Base,), {
         '__init__': lambda s:
-                loader.load(tf.get_default_session(), tag_set.split(','), saved_model_dir),
-        '__tfi_signature_defs__':
-                signature_defs,
+                loader.load(s.__tfi_get_session__(), tag_set.split(','), saved_model_dir),
+        '__tfi_signature_defs__': signature_defs,
+        '__tfi_signature_def_docs__': {},
+        '__tfi_tempdirs__': tempdirs,
         '__tfi_estimator_modes__': {},
         '__tfi_signature_def_shapes__': {},
         '__tfi_refresh_conditions__': _ConditionGenerator(),
     })
 
-def export(export_path, model):
+def load(saved_model_path):
+    cls = as_class(saved_model_path)
+    return cls()
+
+def dump(export_path, model):
+    if export_path.endswith(".zip"):
+        export_zip_path = export_path
+        export_path = export_path[:-4]
+    else:
+        export_zip_path = None
+
     # TODO(adamb) Allow customization of tags.
     tags = [tf.saved_model.tag_constants.SERVING]
 
@@ -715,7 +743,7 @@ def export(export_path, model):
         raise Exception('%s is not an instance of Base' % model)
 
     graph = model.__tfi_graph__
-    session = model.__tfi_session__
+    session = model.__tfi_get_session__()
 
     with graph.as_default():
         # HACK(adamb) For some reason we need to initialize variables before we can save a SavedModel
@@ -743,6 +771,16 @@ def export(export_path, model):
               legacy_init_op=legacy_init_op,
               signature_def_map=model.__tfi_signature_defs__)
         builder.save()
+
+    if export_zip_path:
+        import zipfile
+        with zipfile.ZipFile(export_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for root, dirs, files in os.walk(export_path):
+                for filename in files:
+                    filepath = os.path.join(root, filename)
+                    zipf.write(filepath, arcname=os.path.relpath(filepath, export_path))
+
+export = dump
 
 class _SessionEndHook(tf.train.SessionRunHook):
     def __init__(self, end_hook):

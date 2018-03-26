@@ -43,10 +43,33 @@ def _field(req, field, annotation):
 def _default_if_empty(v, default):
     return v if v is not inspect.Parameter.empty else default
 
+from tfi.tensor.frame import TensorFrame as _TensorFrame
+
 def _make_handler(model, method_name):
     method = getattr(model, method_name)
     sig = inspect.signature(method)
     param_annotations = {k: v.annotation for k, v in sig.parameters.items()}
+
+    accept_mimetypes = {
+        # "image/png": lambda x: base64.b64encode(x),
+        "image/png": lambda x: x,
+        "text/plain": lambda x: x,
+        # Use python/jsonable so we to a recursive transform before jsonification.
+        "python/jsonable": lambda x: x,
+    }
+
+    def _transform_value(o):
+        if isinstance(o, _TensorFrame):
+            o = _TensorFrame(
+                *[
+                    (shape, name, _recursive_transform(tensor, _transform_value))
+                    for shape, name, tensor in o.tuples()
+                ],
+                **o.shape_labels(),
+            ).zipped(jsonable=True)
+
+        return tfi.tensor.codec.encode(accept_mimetypes, o)
+
     def fn():
         d = {}
         for k, ann in param_annotations.items():
@@ -56,14 +79,7 @@ def _make_handler(model, method_name):
         print("args", d)
         result = method(**d)
 
-        accept_mimetypes = {
-            # "image/png": lambda x: base64.b64encode(x),
-            "image/png": lambda x: x,
-            "text/plain": lambda x: x,
-            # Use python/jsonable so we to a recursive transform before jsonification.
-            "python/jsonable": lambda x: x,
-        }
-        r = _recursive_transform(result, lambda o: tfi.tensor.codec.encode(accept_mimetypes, o))
+        r = _recursive_transform(result, _transform_value)
         if r is not None:
             result = r
 
@@ -115,7 +131,7 @@ def make_app(model, model_file_fn, extra_scripts=""):
     return app
 
 class make_deferred_app(object):
-    def __init__(self, model_class_from_path_fn, extra_scripts=""):
+    def __init__(self, load_model_from_path_fn, extra_scripts=""):
         # A default, empty model_app
         self._model_app = Flask(__name__)
 
@@ -127,7 +143,7 @@ class make_deferred_app(object):
         @specialize_app.route('/specialize', methods=['POST'])
         def specialize():
             self._model_app = make_app(
-                    model_class_from_path_fn(codepath),
+                    load_model_from_path_fn(codepath),
                     model_file_fn=lambda: codepath,
                     extra_scripts=extra_scripts)
             return ""
