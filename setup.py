@@ -27,6 +27,7 @@ CLASSIFIERS = [
 ]
 INSTALL_REQUIRES = [
     "ptpython",
+    "pywatchman",
 ]
 EXTRAS_REQUIRE = {
     "tensorflow": [
