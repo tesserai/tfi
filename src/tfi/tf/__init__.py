@@ -360,9 +360,9 @@ def _make_method(instance, signature_def, tensor_shapes, tensor_shape_labels, va
 
     # Need to properly forge method parameters, complete with annotations.
     argnames = input_tensor_names_sorted
-    argdef = ','.join(['_', *argnames])
+    argdef = ','.join(['', '*', *argnames]) if argnames else ''
     argcall = ','.join(['_', *['%s=%s' % (k, k) for k in argnames]])
-    gensrc = """lambda %s: _impl(%s)""" % (argdef, argcall)
+    gensrc = """lambda _%s: _impl(%s)""" % (argdef, argcall)
     impl = eval(gensrc, {'_impl': _impl})
     sigdef_inputs = signature_def.inputs
     # NOTE(adamb) Should these annotations be sorted lexigraphically
