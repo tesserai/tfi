@@ -78,7 +78,7 @@ def resolve(leading_value, rest):
                 dest=dest,
                 metavar=name.upper(),
                 default=None if param.default is empty else param.default,
-                type=parse_arg_fn(param.annotation),
+                type=parse_arg_fn({} if param.annotation is empty else param.annotation ),
             )
         sp.set_defaults(_method=partial(apply_model_method, membername, ns_keys_to_kw))
 

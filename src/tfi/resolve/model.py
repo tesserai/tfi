@@ -130,17 +130,23 @@ def _detect_model_file_kind(file):
             except KeyError:
                 print("didn't find info")
                 pass
+    
+    if os.path.isfile(file) and file.endswith('.msp'):
+        return 'msp'
 
     # Assume it's a PyTorch model!
     return "pytorch"
 
 def _model_module_for_kind(kind):
     if kind == "pytorch":
-        import tfi.pytorch
-        return tfi.pytorch
+        import tfi.driver.pytorch
+        return tfi.driver.pytorch
     if kind == "tensorflow":
-        import tfi.tf
-        return tfi.tf
+        import tfi.driver.tf
+        return tfi.driver.tf
+    if kind == "msp":
+        import tfi.driver.msp
+        return tfi.driver.msp
     raise Exception("Can't detect model module %s" % model)
 
 def _load_model_from_path_fn(source):
@@ -151,7 +157,7 @@ def _load_model_from_path_fn(source):
 def resolve_exported(leading_value):
     return _reify({
         'source': os.path.abspath(leading_value),
-        'loaded_fn': lambda: _model_class_from_path_fn(leading_value),
+        'loaded_fn': lambda: _load_model_from_path_fn(leading_value),
         'module_fn': lambda: None,
         'can_refresh': False,
     })
@@ -237,7 +243,7 @@ def resolve_url(leading_value):
             return _reify({
                 'source': source,
                 'classname': classname,
-                'loaded_fn': lambda: _model_class_from_path_fn(f.name),
+                'loaded_fn': lambda: _load_model_from_path_fn(f.name),
                 'module_fn': lambda: module,
                 'via_python': via_python,
                 'can_refresh': False,

@@ -29,10 +29,12 @@ def _detect_model_object_kind(model):
     for c in klass.mro():
         if c.__name__ != "Base":
             continue
-        if c.__module__ == "tfi.pytorch":
+        if c.__module__ == "tfi.driver.pytorch":
             return "pytorch"
-        if c.__module__ == "tfi.tf":
+        if c.__module__ == "tfi.driver.tf":
             return "tensorflow"
+        if c.__module__ == "tfi.driver.msp":
+            return "msp"
     raise Exception("Unknown model type %s" % klass)
 
 def _model_export(path, model):

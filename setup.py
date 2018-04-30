@@ -30,6 +30,13 @@ INSTALL_REQUIRES = [
     "pywatchman",
 ]
 EXTRAS_REQUIRE = {
+    "msp": [
+        "fbprophet",
+        "gpyopt",
+        "numpy",
+        "pandas",
+        "pystan",  
+    ],
     "tensorflow": [
         "numpy",
         "tensorflow>=1.6.0rc1",

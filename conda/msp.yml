@@ -1,0 +1,32 @@
+name: msp
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.6
+  - Cython=0.25.2
+  - numpy=1.14.0
+  - pandas=0.22
+  - pystan
+  - gpy
+  - python-blosc
+  - cytoolz
+  - dask==0.17
+  - python-dateutil
+  - pytz
+  - distributed==1.21.0
+  - pip:
+    - fbprophet
+    - requests==2.14.2
+    - requests-futures
+    - Flask==0.12.2
+    - Werkzeug
+    - gunicorn==19.7.1
+    - tinydb
+    - yapf
+    - docutils
+    - beautifulsoup4
+    - ptpython
+    - ksuid==1.3
+    - gpyopt
+    - git+https://github.com/dask/distributed.git@bc436e242884a1d4cf3a85ce6d5d378b5663122d
