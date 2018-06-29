@@ -51,7 +51,7 @@ EXTRAS_REQUIRE = {
     "serve": [
         "requests",
         "Flask",
-        "gunicorn",
+        "bjoern",
         "tinydb",
         "yapf",
         "docutils",

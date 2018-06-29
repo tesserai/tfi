@@ -194,22 +194,14 @@ def run(argns, remaining_args):
         """
 
         host, port = argns.bind.split(':')
-        prefork_ok = True
         port = int(port)
         if model is None:
-            if internal_config == 'tensorflow':
-                prefork_ok = False
-
             from tfi.serve import run_deferred as serve_deferred
             serve_deferred(
                     host=host, port=port,
-                    prefork_ok=prefork_ok,
                     load_model_from_path_fn=_load_model_from_path_fn,
                     extra_scripts=segment_js)
         else:
-            if internal_config == 'tensorflow':
-                prefork_ok = False
-
             from tfi.serve import run as serve
             def model_file_fn():
                 if argns.specifier_source and not argns.specifier_via_python:
@@ -222,7 +214,6 @@ def run(argns, remaining_args):
             serve(model,
                     host=host,
                     port=port,
-                    prefork_ok=prefork_ok,
                     extra_scripts=segment_js,
                     model_file_fn=model_file_fn)
 
