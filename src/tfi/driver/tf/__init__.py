@@ -564,7 +564,7 @@ class _ConditionGenerator(object):
             with self._c:
                 self._c.wait()
 
-class Base(object, metaclass=Meta):
+class Model(object, metaclass=Meta):
     def __tfi_get_session_logdir__(self, *args, **kwargs):
         self.__tfi_get_session__()
         return self.__tfi_session_logdir_fn__(*args, **kwargs)
@@ -706,7 +706,7 @@ def as_class(saved_model_path, tag_set=tf.saved_model.tag_constants.SERVING):
     signature_defs = _read_signature_defs(saved_model_dir)
 
     # TODO(adamb) Choose a better name than CUSTOMTYPE.
-    return type('CUSTOMTYPE', (Base,), {
+    return type('CUSTOMTYPE', (Model,), {
         '__init__': lambda s:
                 loader.load(s.__tfi_get_session__(), tag_set.split(','), saved_model_dir),
         '__tfi_signature_defs__': signature_defs,
@@ -731,8 +731,8 @@ def dump(export_path, model):
     # TODO(adamb) Allow customization of tags.
     tags = [tf.saved_model.tag_constants.SERVING]
 
-    if not isinstance(model, Base):
-        raise Exception('%s is not an instance of Base' % model)
+    if not isinstance(model, Model):
+        raise Exception('%s is not an instance of Model' % model)
 
     graph = model.__tfi_graph__
     session = model.__tfi_get_session__()
@@ -912,8 +912,8 @@ def as_estimator(model_or_class, model_dir=None):
         )
         return estimator
 
-    if not isinstance(model_or_class, tfi.driver.tf.Base):
-        raise Exception('%s is not an instance of Base' % instance)
+    if not isinstance(model_or_class, tfi.driver.tf.Model):
+        raise Exception('%s is not an instance of Model' % instance)
 
     return _make_estimator_from_instance(model_or_class)
 
