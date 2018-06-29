@@ -11,9 +11,3 @@ __email__ = "adam@bouhenguel.com"
 
 __license__ = "MIT"
 __copyright__ = "Copyright (c) 2017 Adam Bouhenguel"
-
-def tf_make_logdir_fn(datetime):
-    dir = datetime.strftime("/tmp/tfi/tf/%F_%H-%M-%S")
-    def logdir_fn(run_id=None):
-        return dir
-    return logdir_fn

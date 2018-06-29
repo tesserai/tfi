@@ -14,6 +14,8 @@ import sys
 import tempfile
 
 import tfi
+import tfi.driver
+import tfi.driverconfig
 
 from tfi.resolve.model import _detect_model_file_kind, _model_module_for_kind, _load_model_from_path_fn
 from tfi.cli import resolve as _resolve_model
@@ -125,7 +127,8 @@ def run(argns, remaining_args):
             return base_logdir_formatstr % run_id
         return logdir_fn
     import tfi
-    tfi.tf_make_logdir_fn = tf_make_logdir_fn
+    import tfi.driverconfig
+    tfi.driverconfig.tf.make_logdir_fn = tf_make_logdir_fn
 
     if argns.specifier:
         model = argns.specifier
@@ -146,7 +149,7 @@ def run(argns, remaining_args):
 
     tensorboard = internal_config == 'tensorflow' and argns.interactive
     if tensorboard:
-        import tfi.tf.tensorboard_server
+        import tfi.driver.tf.tensorboard_server
         import threading
         tb_logdir = argns.tf_logdir
         while '%' in tb_logdir:
@@ -176,7 +179,7 @@ def run(argns, remaining_args):
                     sys.stdout.flush()
                 with tb_cv:
                     tb_cv.notify_all()
-            tfi.tf.tensorboard_server.main(tb_logdir, tb_host=tb_host, tb_port=tb_port, tb_on_ready_fn=on_ready_fn)
+            tfi.driver.tf.tensorboard_server.main(tb_logdir, tb_host=tb_host, tb_port=tb_port, tb_on_ready_fn=on_ready_fn)
 
         with tb_cv:
             tb_thread = threading.Thread(target=tb_run, daemon=True)

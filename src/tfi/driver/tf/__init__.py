@@ -27,10 +27,11 @@ from tfi.base import _GetAttrAccumulator
 from tfi.parse.docstring import GoogleDocstring
 
 from tfi.tensor.codec import _BaseAdapter
-from tfi.tf.tensor_codec import as_tensor
+import tfi.driverconfig.tf
+from tfi.driver.tf.tensor_codec import as_tensor
 
 import tfi.tensor.frame
-import tfi.tf.checkpoint
+import tfi.driver.tf.checkpoint
 
 def _walk(out_tensors, in_tensors, fn):
     to_visit = set(out_tensors)
@@ -571,17 +572,8 @@ class Base(object, metaclass=Meta):
     def __tfi_get_session__(self):
         if not self.__tfi_session__:
             graph = self.__tfi_graph__
-            config = tf.ConfigProto(
-                device_count={'CPU' : 1, 'GPU' : 0},
-                allow_soft_placement=True,
-                log_device_placement=False,
-                gpu_options={'allow_growth': True},
-            )
-            self.__tfi_session_logdir_fn__ = tfi.tf_make_logdir_fn(datetime.datetime.now())
-            self.__tfi_session__ = tf.Session(
-                graph=graph,
-                config=config,
-            )
+            self.__tfi_session_logdir_fn__ = tfi.driverconfig.tf.make_logdir_fn(datetime.datetime.now())
+            self.__tfi_session__ = tfi.driverconfig.tf.make_session(graph)
         return self.__tfi_session__
 
     def __tfi_save_initialized_vars__(self, dir):
@@ -920,7 +912,7 @@ def as_estimator(model_or_class, model_dir=None):
         )
         return estimator
 
-    if not isinstance(model_or_class, tfi.tf.Base):
+    if not isinstance(model_or_class, tfi.driver.tf.Base):
         raise Exception('%s is not an instance of Base' % instance)
 
     return _make_estimator_from_instance(model_or_class)
