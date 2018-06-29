@@ -147,6 +147,9 @@ def run(argns, remaining_args):
 
     internal_config = argns.internal_config or (model and _detect_model_object_kind(model))
 
+    if internal_config == 'tensorflow':
+        import tensorflow
+
     tensorboard = internal_config == 'tensorflow' and argns.interactive
     if tensorboard:
         import tfi.driver.tf.tensorboard_server
