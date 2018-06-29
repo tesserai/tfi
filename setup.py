@@ -41,7 +41,7 @@ EXTRAS_REQUIRE = {
     ],
     "tensorflow": [
         "numpy",
-        "tensorflow>=1.6.0rc1",
+        "tensorflow>=1.6",
     ],
     "pytorch": [
         "cloudpickle",
