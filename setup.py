@@ -26,10 +26,12 @@ CLASSIFIERS = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 INSTALL_REQUIRES = [
-    "ptpython",
-    "pywatchman",
 ]
 EXTRAS_REQUIRE = {
+    "cli": [
+        "ptpython",
+        "pywatchman",
+    ],
     "msp": [
         "fbprophet",
         "gpyopt",
