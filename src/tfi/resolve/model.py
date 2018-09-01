@@ -314,7 +314,7 @@ def resolve_module(leading_value):
         mod = None
 
     return _reify({
-        'source': source,
+        'source': None,
         'classname': classname,
         'loaded_fn': lambda: getattr(module(), classname),
         'module_fn': module,
