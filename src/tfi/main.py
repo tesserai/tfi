@@ -203,10 +203,13 @@ def run(argns, remaining_args):
 
         host, port = argns.bind.split(':')
         port = int(port)
+        def on_bind(url):
+            print("Serving at %s" % url)
+
         if model is None:
             from tfi.serve import run_deferred as serve_deferred
             serve_deferred(
-                    host=host, port=port,
+                    host=host, port=port, on_bind=on_bind,
                     load_model_from_path_fn=_load_model_from_path_fn,
                     extra_scripts=segment_js)
         else:
@@ -222,6 +225,7 @@ def run(argns, remaining_args):
             serve(model,
                     host=host,
                     port=port,
+                    on_bind=on_bind,
                     extra_scripts=segment_js,
                     model_file_fn=model_file_fn)
 
