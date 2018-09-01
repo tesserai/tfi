@@ -20,7 +20,7 @@ class TensorFrame(object):
                 continue
             if dimname not in willzip:
                 willzip[dimname] = []
-                lengths[dimname] = tensor.shape[0]
+                lengths[dimname] = tensor.shape[0] if hasattr(tensor, 'shape') else len(tensor)
 
             willzip[dimname].append((shape[1:], name, tensor))
 
@@ -30,7 +30,7 @@ class TensorFrame(object):
             ready[readykey] = [
                 TensorFrame._zip(
                     [
-                        (shape, name, tensor[ix, ...])
+                        (shape, name, tensor[ix, ...] if isinstance(tensor, np.ndarray) else tensor[ix])
                         for shape, name, tensor in nested
                     ],
                     dimlabels,
