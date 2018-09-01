@@ -53,8 +53,8 @@ def record_documentation(model):
         model.__tfi_saved_fields__.append('__tfi_documentation__')
 
 def documentation(model):
-    # if not isinstance(model, Base):
-    #     raise Exception("%s is not an instance of Base" % model)
+    # if not isinstance(model, Model):
+    #     raise Exception("%s is not an instance of Model" % model)
 
     if hasattr(model, '__tfi_documentation__'):
         return model.__tfi_documentation__

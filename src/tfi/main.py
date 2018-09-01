@@ -29,7 +29,7 @@ from itertools import takewhile
 def _detect_model_object_kind(model):
     klass = model if isinstance(model, type) else type(model)
     for c in klass.mro():
-        if c.__name__ != "Base":
+        if c.__name__ != "Model":
             continue
         if c.__module__ == "tfi.driver.pytorch":
             return "pytorch"
