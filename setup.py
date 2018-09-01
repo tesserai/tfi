@@ -41,6 +41,7 @@ EXTRAS_REQUIRE = {
     ],
     "tensorflow": [
         "numpy",
+        "tensorflow",
     ],
     "pytorch": [
         "cloudpickle",
