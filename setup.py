@@ -41,7 +41,6 @@ EXTRAS_REQUIRE = {
     ],
     "tensorflow": [
         "numpy",
-        "tensorflow>=1.6",
     ],
     "pytorch": [
         "cloudpickle",
@@ -49,13 +48,14 @@ EXTRAS_REQUIRE = {
         "torchvision",
     ],
     "serve": [
-        "requests",
-        "Flask",
-        "bjoern",
-        "tinydb",
-        "yapf",
-        "docutils",
         "beautifulsoup4",
+        "bjoern",
+        "docutils",
+        "Flask",
+        "requests",
+        "tinydb",
+        "wsgilog",
+        "yapf",
     ],
 }
 ENTRY_POINTS = {
