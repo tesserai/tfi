@@ -315,7 +315,7 @@
     <link rel="stylesheet" href="/design/fonts/whitney.css">
     <meta property="og:title" content="{{title}}" />
     <meta property="og:description" content="{{description}}" />
-    <meta name="tesserai:snapshot" content="http://{{host}}/meta/snapshot"/>
+    <meta name="tesserai:snapshot" content="{{proto}}://{{host}}/meta/snapshot"/>
 
     <!-- <meta property="og:image" content="http://example.com/foo.png" /> -->
     <!-- <meta property="og:site_name" content="Tesserai"/> -->
@@ -398,12 +398,12 @@
 
       <div class="method-example">
         <div class="method-example-code" data-language="curl">
-          <pre><code class="language-bash line-numbers">curl http://{{host}}/ok</code></pre>
+          <pre><code class="language-bash line-numbers">curl {{proto}}://{{host}}/ok</code></pre>
         </div>
 
         <div class="method-example-code" data-language="python" style="display: none;">
           <pre><code class="language-bash line-numbers">pip install tfi
-tfi http://{{host}}</code></pre>
+tfi {{proto}}://{{host}}</code></pre>
         </div>
         {{language_tabs()}}
       </div>

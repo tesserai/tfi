@@ -36,6 +36,7 @@ def render(
         hyperparameters,
         implementation_notes,
         references,
+        proto,
         host,
         extra_scripts=""):
 
@@ -93,7 +94,7 @@ def render(
                 return None
 
         return "curl %s" % " \\\n   ".join([
-            "http://%s/api/%s" % (host, method_name),
+            "%s://%s/api/%s" % (proto, host, method_name),
             *[
                 "-F %s=%s" % (k, quoted_json_dumps(v))
                 for k, v in example_args.items()
@@ -217,5 +218,6 @@ def render(
                 (refname, references[refname])
                 for refname in citation_label_by_refname
             ]),
+            proto=proto,
             host=host,
             methods=methods)

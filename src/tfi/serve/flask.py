@@ -124,8 +124,10 @@ def make_app(model, model_file_fn, extra_scripts=""):
 
     @app.route("/", methods=["GET"])
     def docs():
-        return render(**documentation(model),
-                      host=request.headers['HOST'],
+        doc_dict = documentation(model)
+        return render(**doc_dict,
+                      proto=request.headers.get('X-Forwarded-Proto', 'http'),
+                      host=request.headers.get('X-Forwarded-Host', request.headers['HOST']),
                       extra_scripts=extra_scripts)
 
     return app
@@ -134,6 +136,7 @@ class make_deferred_app(object):
     def __init__(self, load_model_from_path_fn, extra_scripts=""):
         # A default, empty model_app
         self._model_app = Flask(__name__)
+        self._is_specialized = False
 
         codepath = '/userfunc/user'
         specialize_app = Flask(__name__)
@@ -146,12 +149,13 @@ class make_deferred_app(object):
                     load_model_from_path_fn(codepath),
                     model_file_fn=lambda: codepath,
                     extra_scripts=extra_scripts)
+            self._is_specialized = True
             return ""
 
     def __call__(self, environ, start_response):
-        if environ['PATH_INFO'] == '/specialize':
+        if not self._is_specialized:
             return self._specialize_app(environ, start_response)
-        
+
         if 'HTTP_X_FISSION_PARAMS_PATH_INFO' in environ:
             environ['PATH_INFO'] = '/' + environ['HTTP_X_FISSION_PARAMS_PATH_INFO']
         elif 'HTTP_X_FISSION_PARAMS_METHOD' in environ:
