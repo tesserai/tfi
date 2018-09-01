@@ -58,7 +58,10 @@ def resolve(leading_value, rest):
         return apply_fn(ns_keys_to_kw, getattr(model, method_name), ns)
 
     def parse_arg_fn(annotation):
-        dtype_fn = annotation.get('dtype', lambda i: i)
+        if isinstance(annotation, dict):
+            dtype_fn = annotation.get('dtype', lambda i: i)
+        elif hasattr(annotation, 'dtype'):
+            dtype_fn = annotation.dtype
         return lambda o: dtype_fn(_tfi_data_file(o[1:]) if o.startswith("@") else o)
 
     subparsers = p.add_subparsers(help='sub-command help')

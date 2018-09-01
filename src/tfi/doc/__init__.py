@@ -4,6 +4,7 @@ import sys
 
 from collections import OrderedDict as _OrderedDict
 
+from tfi.tensor.frame import TensorFrame as _TensorFrame
 from tfi.parse.docstring import GoogleDocstring as _GoogleDocstring
 from tfi.parse.arxiv import discover_arxiv_ids as _discover_arxiv_ids
 from tfi.parse.python import parse_example_args as _parse_example_args
@@ -112,6 +113,8 @@ def documentation(model):
         example_result = {}
         try:
             example_result = getattr(model, method_name)(**example_args)
+            if isinstance(example_result, _TensorFrame):
+                example_result = example_result.dict()
         except Exception as ex:
             print(ex)
 
