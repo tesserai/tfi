@@ -47,6 +47,9 @@ EXTRAS_REQUIRE = {
         "pytorch",
         "torchvision",
     ],
+    "spacy": [
+        "spacy",
+    ],
     "serve": [
         "beautifulsoup4",
         "bjoern",

@@ -115,22 +115,48 @@ def _reify(resolution):
 
 import mimetypes
 import zipfile
+import json
 
 _tensorflow_marker_file = 'saved_model.pb'
+_spacy_meta_file = 'meta.json'
+
+def _zipfile_find_entry_with_basename(zipf, basename):
+  try:
+    return zipf.getinfo(basename)
+  except KeyError:
+    for name in zipf.namelist():
+      if os.path.basename(name) == basename:
+        return zipf.getinfo(name)
+  return None
+
+def _is_spacy_meta(file_bytes):
+  s = file_bytes.decode('utf-8')
+  spacy_meta = json.loads(s)
+  if not isinstance(spacy_meta, dict):
+    return False
+  return spacy_meta.get('parent_package', None) == 'spacy'
+
 def _detect_model_file_kind(file):
-    if os.path.isdir(file) and os.path.exists(os.path.join(file, _tensorflow_marker_file)):
-        # It's a SavedModel!
+  if os.path.isdir(file):
+    if os.path.exists(os.path.join(file, _tensorflow_marker_file)):
+      return "tensorflow"
+
+    spacy_meta_file = os.path.join(file, _spacy_meta_file)
+    if os.path.exists(spacy_meta_file):
+      with open(spacy_meta_file, 'rb') as spacy_meta_f:
+        if _is_spacy_meta(spacy_meta_f.read()):
+          return "spacy"
+
+  if zipfile.is_zipfile(file):
+    with zipfile.ZipFile(file) as zipf:
+      if _zipfile_find_entry_with_basename(zipf, _tensorflow_marker_file):
         return "tensorflow"
 
-    if zipfile.is_zipfile(file):
-        with zipfile.ZipFile(file) as zipf:
-            try:
-                zipf.getinfo(_tensorflow_marker_file)
-                return "tensorflow"
-            except KeyError:
-                print("didn't find info")
-                pass
-    
+      spacy_meta_zipinfo = _zipfile_find_entry_with_basename(zipf, _spacy_meta_file)
+      if spacy_meta_zipinfo:
+          if _is_spacy_meta(zipf.read(spacy_meta_zipinfo)):
+            return "spacy"
+
     if os.path.isfile(file) and file.endswith('.msp'):
         return 'msp'
 
@@ -144,6 +170,9 @@ def _model_module_for_kind(kind):
     if kind == "tensorflow":
         import tfi.driver.tf
         return tfi.driver.tf
+    if kind == "spacy":
+        import tfi.driver.spacy
+        return tfi.driver.spacy
     if kind == "msp":
         import tfi.driver.msp
         return tfi.driver.msp

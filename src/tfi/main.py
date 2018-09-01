@@ -37,6 +37,8 @@ def _detect_model_object_kind(model):
             return "tensorflow"
         if c.__module__ == "tfi.driver.msp":
             return "msp"
+        if c.__module__ == "tfi.driver.spacy":
+            return "spacy"
     raise Exception("Unknown model type %s" % klass)
 
 def _model_export(path, model):
