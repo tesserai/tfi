@@ -3,6 +3,7 @@ import hashlib
 import inspect
 import os.path
 import weakref
+import importlib
 
 from collections import OrderedDict
 from functools import partial
