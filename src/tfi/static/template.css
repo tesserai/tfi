@@ -400,7 +400,7 @@ nav select:focus {
   margin-top: 0.5rem;
   margin-left: 11.8rem;
   color: var(--gray-text-light);
-  font-size: 4rem;
+  font-size: 2rem;
   line-height: 1;
   font-weight: 100;
 }
