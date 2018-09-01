@@ -60,6 +60,8 @@ EXTRAS_REQUIRE = {
         "tinydb",
         "wsgilog",
         "yapf",
+        "Flask-Opentracing",
+        "jaeger-client",
     ],
 }
 ENTRY_POINTS = {

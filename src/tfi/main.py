@@ -86,6 +86,8 @@ class ModelSpecifier(argparse.Action):
 
 parser = argparse.ArgumentParser(prog='tfi', add_help=False)
 parser.add_argument('--serve', default=False, action='store_true', help='Start REST API on given port')
+parser.add_argument('--tracing-host', type=str, default=os.environ.get('JAEGER_HOST', None), help='Jaeger host to submit traces to while serving')
+parser.add_argument('--tracing-tags', type=str, default=os.environ.get('JAEGER_TAGS', ''), help='Jaeger tags to include in traces to while serving')
 parser.add_argument('--internal-config', type=str, default=os.environ.get("TFI_INTERNAL_CONFIG", ""), help='For internal use.')
 parser.add_argument('--publish', default=False, action='store_true', help='Publish model')
 parser.add_argument('--bind', type=str, default='127.0.0.1:5000', help='Set address:port to serve model on')
@@ -206,12 +208,20 @@ def run(argns, remaining_args):
         def on_bind(url):
             print("Serving at %s" % url)
 
+        tracing_tags = {}
+        if argns.tracing_tags:
+            for tag_entry in argns.tracing_tags.split(' '):
+                tag_k, tag_v = tag_entry.split('=', 1)
+                tracing_tags[tag_k] = tag_v
+
         if model is None:
             from tfi.serve import run_deferred as serve_deferred
             serve_deferred(
                     host=host, port=port, on_bind=on_bind,
                     load_model_from_path_fn=_load_model_from_path_fn,
-                    extra_scripts=segment_js)
+                    extra_scripts=segment_js,
+                    jaeger_host=argns.tracing_host,
+                    jaeger_tags=tracing_tags)
         else:
             from tfi.serve import run as serve
             def model_file_fn():
@@ -227,6 +237,8 @@ def run(argns, remaining_args):
                     port=port,
                     on_bind=on_bind,
                     extra_scripts=segment_js,
+                    jaeger_host=argns.tracing_host,
+                    jaeger_tags=tracing_tags,
                     model_file_fn=model_file_fn)
 
     if argns.watch:
