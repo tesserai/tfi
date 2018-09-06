@@ -41,6 +41,11 @@ def _field(req, field, annotation):
         else:
             v = tfi_data.json(v)
         return True, v
+
+    # TODO(adamb) Test!
+    json_data = req.get_json(force=True)
+    if json_data:
+        return (field in json_data, json_data.get(field, None))
     return False, None
 
 def _default_if_empty(v, default):
