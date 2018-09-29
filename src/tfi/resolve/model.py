@@ -137,6 +137,15 @@ def _is_spacy_meta(file_bytes):
     return False
   return spacy_meta.get('parent_package', None) == 'spacy'
 
+def _maybe_squashfs_image(file):
+  try:
+    import PySquashfsImage
+    return PySquashfsImage.SquashFsImage(file)
+  except ImportError:
+      return None
+  except IOError:
+    return None
+
 def _detect_model_file_kind(file):
   if os.path.isdir(file):
     if os.path.exists(os.path.join(file, _tensorflow_marker_file)):
@@ -158,11 +167,26 @@ def _detect_model_file_kind(file):
           if _is_spacy_meta(zipf.read(spacy_meta_zipinfo)):
             return "spacy"
 
-    if os.path.isfile(file) and file.endswith('.msp'):
-        return 'msp'
+  squashfs_image = _maybe_squashfs_image(file)
+  if squashfs_image:
+    try:
+      for entry in squashfs_image.root.findAll():
+        entry_name = entry.getName()
+        if isinstance(entry_name, bytes):
+          entry_name = entry_name.decode('utf-8')
+        if entry_name == _tensorflow_marker_file:
+          return "tensorflow"
+        if entry_name == _spacy_meta_file:
+          if _is_spacy_meta(entry.getContent()):
+            return "spacy"
+    finally:
+      squashfs_image.close()
 
-    # Assume it's a PyTorch model!
-    return "pytorch"
+  if os.path.isfile(file) and file.endswith('.msp'):
+    return 'msp'
+
+  # Assume it's a PyTorch model!
+  return "pytorch"
 
 def _model_module_for_kind(kind):
     if kind == "pytorch":

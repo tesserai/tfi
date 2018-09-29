@@ -193,6 +193,9 @@ def run(argns, remaining_args):
             tb_thread.start()
             tb_cv.wait()
 
+    if internal_config == 'spacy':
+        import tfi.driver.spacy
+
     if serving:
         segment_js = """
 <script>
@@ -202,6 +205,7 @@ def run(argns, remaining_args):
   }}();
 </script>
         """
+        segment_js = ""
 
         host, port = argns.bind.split(':')
         port = int(port)
@@ -287,10 +291,13 @@ def run(argns, remaining_args):
                 url = _model_publish(f)
         print(url)
 
-def main():
-    argns, remaining_args = parser.parse_known_args(sys.argv[1:])
+def cli(args):
+    argns, remaining_args = parser.parse_known_args(args)
     argns.load_model_from_path_fn = _load_model_from_path_fn
     run(argns, remaining_args)
+
+def main():
+    cli(sys.argv[1:])
 
 if __name__ == '__main__':
     main()

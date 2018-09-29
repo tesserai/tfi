@@ -206,7 +206,7 @@ def _resolve_instance_method_tensors(lazy_instance, method):
 
         return '%s <%s>' % (
             tensor.dtype.name,
-            ', '.join(['?' if n is None else str(n) for n in tensor.shape.as_list()]),
+            ', '.join([None if n is None else str(n) for n in tensor.shape.as_list()]),
         )
 
     def _enrich_docs_with_tensor_info(doc_fields, tensor_dict):
@@ -383,7 +383,6 @@ def _infer_signature_defs(class_dict, instance):
     signature_defs = OrderedDict()
     signature_def_docs = OrderedDict()
     estimator_modes = OrderedDict()
-    signature_def_shapes = OrderedDict()
 
     fields = instance.__dict__
     # print("fields", fields)
@@ -413,12 +412,11 @@ def _infer_signature_defs(class_dict, instance):
 
     for method_name in raw_methods.keys():
         resolved_method = _resolve_attr(method_name)
-        signature_def_shapes[method_name] = (resolved_method.output_tensor_shapes, resolved_method.output_tensor_shape_labels)
         signature_def_docs[method_name] = resolved_method.doc
         signature_defs[method_name] = resolved_method.build_signature_def()
         estimator_modes[method_name] = resolved_method.estimator_mode
 
-    return signature_defs, signature_def_docs, estimator_modes, signature_def_shapes
+    return signature_defs, signature_def_docs, estimator_modes
 
 class Meta(type):
     @staticmethod
@@ -472,7 +470,7 @@ class Meta(type):
 
                     # Once init has executed, we can bind proper methods too!
                     if not hasattr(self, '__tfi_signature_defs__'):
-                        self.__tfi_signature_defs__, self.__tfi_signature_def_docs__, self.__tfi_estimator_modes__, self.__tfi_signature_def_shapes__ = _infer_signature_defs(d, self)
+                        self.__tfi_signature_defs__, self.__tfi_signature_def_docs__, self.__tfi_estimator_modes__ = _infer_signature_defs(d, self)
 
                     if not hasattr(self, '__tfi_vars_initialized__'):
                         self.__tfi_vars_initialized__ = set()
@@ -497,7 +495,7 @@ class Meta(type):
                                 [graph.get_tensor_by_name(ti.name) for ti in sigdef.inputs.values()],
                                 visit_method_node)
 
-                            output_tensor_shapes, output_tensor_shape_labels = self.__tfi_signature_def_shapes__.get(method_name, ((), ()))
+                            output_tensor_shapes, output_tensor_shape_labels = self.__tfi_get_signature_def_output_shapes__(method_name)
                             method = _make_method(self, sigdef, output_tensor_shapes, output_tensor_shape_labels, method_vars)
                             setattr(self, method_name, method)
 
@@ -568,6 +566,16 @@ class Model(object, metaclass=Meta):
     def __tfi_get_session_logdir__(self, *args, **kwargs):
         self.__tfi_get_session__()
         return self.__tfi_session_logdir_fn__(*args, **kwargs)
+
+    def __tfi_get_signature_def_output_shapes__(self, method_name):
+        signature_def = self.__tfi_signature_defs__[method_name]
+        return (
+            {
+                output: tuple([dim.name if dim.name else None if ix > 0 else 'B' for ix, dim in enumerate(tensor_info.tensor_shape.dim)])
+                for output, tensor_info in signature_def.outputs.items()
+            },
+            {},
+        )
     
     def __tfi_get_session__(self):
         if not self.__tfi_session__:
@@ -702,18 +710,122 @@ def as_class(saved_model_path, tag_set=tf.saved_model.tag_constants.SERVING):
         with zipfile.ZipFile(saved_model_path) as zipf:
             # print("extracting", zipf.namelist(), "to", saved_model_dir)
             zipf.extractall(saved_model_dir)
+            while True:
+                extracted_entries = os.listdir(saved_model_dir)
+                if len(extracted_entries) == 1:
+                    saved_model_dir = os.path.join(saved_model_dir, extracted_entries[0])
+                else:
+                    break
+
+    example_specs = {}
+    example_specs_path = os.path.join(saved_model_dir, 'assets.extra', 'tfi/example-specs.json')
+    if os.path.exists(example_specs_path):
+        with open(example_specs_path) as f:
+            example_specs = json.load(f)
 
     signature_defs = _read_signature_defs(saved_model_dir)
 
+    def _tensor_info_str(tensor_info):
+        if tensor_info.tensor_shape.unknown_rank:
+            return '%s ?' % tf.as_dtype(tensor_info.dtype).name
+
+        return '%s <%s>' % (
+            tf.as_dtype(tensor_info.dtype).name,
+            ', '.join(['?' if dim.size == -1 else str(dim.size) for dim in tensor_info.tensor_shape.dim]),
+        )
+
+
+    example_proto = {}
+    example_json_path = os.path.join(saved_model_dir, 'assets.extra/doc/examples.json')
+    if os.path.exists(example_json_path):
+        with open(example_json_path) as f:
+            import json
+            example_json = json.load(f)
+            from google.protobuf.json_format import ParseDict
+            with tf.Session(graph=tf.Graph()) as session:
+                def feature_for_tensor_info(tensor_info):
+                    tensor_shape = tensor_info.tensor_shape.dim[1:]
+                    dtype = tf.DType(tensor_info.dtype)
+                    if tensor_shape[-1].size != -1:
+                        return tf.FixedLenFeature(dtype=dtype, shape=[dim.size for dim in tensor_shape])
+                    return tf.VarLenFeature(dtype=dtype)
+
+                def _repr(tensor_value):
+                    if isinstance(tensor_value, tf.SparseTensorValue):
+                        # THIS IS VERY WRONG. ASSUMES A RAGGED SPARSE TENSOR.
+                        return _repr(tensor_value.values)
+                    if tensor_value.dtype.kind == 'O':
+                        tensor_value = np.vectorize(lambda x: x.decode('utf-8'))(tensor_value)
+                    return repr([tensor_value.tolist()]) 
+
+                def example_for(signature_def_tensors, example_dict):
+                    example_features = {
+                        name: feature_for_tensor_info(tensor_info)
+                        for name, tensor_info in signature_def_tensors.items()
+                    }
+                    asdfasdf = session.run(
+                        tf.parse_single_example(
+                            ParseDict(example_dict, tf.train.Example()).SerializeToString(),
+                            features=example_features))
+                    parsed_example = [
+                        (
+                            k,
+                            v.dtype.name if not isinstance(v, tf.SparseTensorValue) else v.values.dtype.name,
+                            [_repr(v)],
+                        )
+                        for k, v in asdfasdf.items()
+                    ]
+                    return parsed_example
+                example_proto = {
+                    method_name: {
+                        'example args': example_for(signature_defs[method_name].inputs, example_info['example args']),
+                        'example result': example_for(signature_defs[method_name].outputs, example_info['example result']),
+                    }
+                    for method_name, example_info in example_json.items()
+                }
+
+    metadata_json = {}
+    metadata_json_path = os.path.join(saved_model_dir, 'assets.extra/doc/metadata.json')
+    if os.path.exists(metadata_json_path):
+        with open(metadata_json_path) as f:
+            import json
+            metadata_json = json.load(f)
+    method_metadatas = {}
+    if 'methods' in metadata_json:
+        for method_metadata in metadata_json['methods']:
+            method_metadatas[method_metadata['name']] = method_metadata
+    
+    
     # TODO(adamb) Choose a better name than CUSTOMTYPE.
     return type('CUSTOMTYPE', (Model,), {
         '__init__': lambda s:
                 loader.load(s.__tfi_get_session__(), tag_set.split(','), saved_model_dir),
+        '__name__': metadata_json.get('name', None),
         '__tfi_signature_defs__': signature_defs,
-        '__tfi_signature_def_docs__': {},
+        '__tfi_signature_def_docs__': {
+            method_name: {
+                'sections': [],
+                'args': [
+                    (name, _tensor_info_str(tensor), '')
+                    for name, tensor in signature_def.inputs.items()
+                ],
+                'returns': [
+                    (name, _tensor_info_str(tensor), '')
+                    for name, tensor in signature_def.outputs.items()                    
+                ],
+                **example_proto.get(method_name, {}),
+                **method_metadatas.get(method_name, {}),
+            }
+            for method_name, signature_def in signature_defs.items()
+        },
+        '__tfi_hyperparameters__': metadata_json.get('hyperparameters', []),
         '__tfi_tempdirs__': tempdirs,
-        '__tfi_estimator_modes__': {},
-        '__tfi_signature_def_shapes__': {},
+        '__tfi_estimator_modes__': {
+            # For now we assume that *all* methods in a SavedModel should be used for estimator inference
+            method_name: 'infer'
+            for method_name in signature_defs.keys()
+        },
+        '__tfi_signature_def_example_specs__': example_specs,
         '__tfi_refresh_conditions__': _ConditionGenerator(),
     })
 
@@ -788,7 +900,7 @@ def _estimator_method_name(estimator_modes, mode):
             matching.append(method_name)
 
     if not matching:
-        raise Exception("No estimator configuration for mode %s for %s. Have: %s" % (mode, c, set(estimator_modes.values())))
+        raise Exception("No estimator configuration for mode %s. Have: %s" % (mode, set(estimator_modes.values())))
 
     if len(matching) > 1:
         raise Exception("Found multiple matching estimator configurations for mode %s for model %s: %s" % (mode, model, matching))

@@ -299,8 +299,9 @@
 {% macro language_tabs() -%}
   <div class="tabs tabs-code">
     <nav class="nav-languages">
-      <a data-language="curl" class="selected">curl (remote)</a>
-      <a data-language="python" class="">Python (local)</a>
+      {% for lang in languages %}
+      <a data-language="{{lang['language']}}"{% if loop.first %} class="selected"{% endif %}>{{lang['label']}}</a>
+      {% endfor %}
     </nav>
   </div>
 {%- endmacro %}
@@ -315,7 +316,7 @@
     <link rel="stylesheet" href="/design/fonts/whitney.css">
     <meta property="og:title" content="{{title}}" />
     <meta property="og:description" content="{{description}}" />
-    <meta name="tesserai:snapshot" content="{{proto}}://{{host}}/meta/snapshot"/>
+    {% if include_snapshot %}<meta name="tesserai:snapshot" content="{{proto}}://{{host}}/meta/snapshot"/>{% endif %}
 
     <!-- <meta property="og:image" content="http://example.com/foo.png" /> -->
     <!-- <meta property="og:site_name" content="Tesserai"/> -->
@@ -397,14 +398,11 @@
       </p>
 
       <div class="method-example">
-        <div class="method-example-code" data-language="curl">
-          <pre><code class="language-bash line-numbers">curl {{proto}}://{{host}}/ok</code></pre>
+        {% for lang in languages %}
+        <div class="method-example-code" data-language="{{lang['language']}}"{% if not loop.first %} style="display: none;"{% endif %}>
+          <pre><code class="{{lang['getting_started_class']}} line-numbers">{{lang['getting_started']}}</code></pre>
         </div>
-
-        <div class="method-example-code" data-language="python" style="display: none;">
-          <pre><code class="language-bash line-numbers">pip install tfi
-tfi {{proto}}://{{host}}</code></pre>
-        </div>
+        {% endfor %}
         {{language_tabs()}}
       </div>
     </section>
@@ -428,12 +426,11 @@ tfi {{proto}}://{{host}}</code></pre>
       </div>
       {% endif %}
       <div class="method-example">
-        <div class="method-example-code" data-language="curl">
-          <pre><code class="language-curl line-numbers">{{curl_example_for(method)}}</code></pre>
+        {% for lang in languages %}
+        <div class="method-example-code" data-language="{{lang['language']}}"{% if not loop.first %} style="display: none;"{% endif %}>
+          <pre><code class="{{lang['example_for_class']}} line-numbers">{{lang['example_for'](method)}}</code></pre>
         </div>
-        <div class="method-example-code" data-language="python" style="display: none;">
-          <pre><code class="language-python line-numbers">{{python_example_for(method, {'COLUMN_LIMIT': 50})}}</code></pre>
-        </div>
+        {% endfor %}
         {{language_tabs()}}
       </div>
       <div class="method-copy">
@@ -442,12 +439,11 @@ tfi {{proto}}://{{host}}</code></pre>
         {% endif %}
       </div>
       <div class="method-example">
-        <div class="method-example-code" data-language="curl">
-          <pre><code class="language-json2">{{json_repr(method['example result'], 50, 7)}}</code></pre>
+        {% for lang in languages %}
+        <div class="method-example-code" data-language="{{lang['language']}}"{% if not loop.first %} style="display: none;"{% endif %}>
+          <pre><code class="{{lang['repr_class']}}">{{lang['repr'](method['example result'], 50, 7)}}</code></pre>
         </div>
-        <div class="method-example-code" data-language="python" style="display: none;">
-          <pre><code class="language-python">{{python_repr(method['example result'], 50, 7)}}</code></pre>
-        </div>
+        {% endfor %}
       </div>
     </section>
     {% endfor %}

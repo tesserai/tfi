@@ -36,6 +36,7 @@ def render(
         hyperparameters,
         implementation_notes,
         references,
+        include_snapshot,
         proto,
         host,
         extra_scripts=""):
@@ -196,13 +197,39 @@ def render(
         else:
             body_sections.append(section)
 
+    languages = [
+        {
+            'language': 'curl',
+            'label': 'curl (remote)',
+            'example_for': curl_example_for_method,
+            'example_for_class': 'language-curl',
+            'repr': json_repr,
+            'repr_class': 'language-json2',
+            'getting_started_class': 'language-bash',
+            'getting_started': """curl %s://%s/ok""" % (proto, host)
+        },
+    ]
+
+    if include_snapshot:
+        languages.append(
+            {
+                'language': 'python',
+                'label': 'Python (local)',
+                'example_for': lambda method: python_example_for(method, {'COLUMN_LIMIT': 50}),
+                'example_for_class': 'language-python',
+                'repr': python_repr,
+                'repr_class': 'language-python',
+                'getting_started_class': 'language-bash',
+                'getting_started': """pip install tfi
+    tfi %s://%s""" % (proto, host)
+            },
+        )
+
     return t.render(
             read_template_file=_read_template_file,
-            python_repr=python_repr,
-            json_repr=json_repr,
+            languages=languages,
             html_repr=html_repr,
-            python_example_for=python_example_for,
-            curl_example_for=curl_example_for_method,
+            include_snapshot=include_snapshot,
             extra_scripts=extra_scripts,
             title=parsed['title'],
             subhead=parsed['subtitle'],
