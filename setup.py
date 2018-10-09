@@ -27,9 +27,13 @@ CLASSIFIERS = [
 ]
 INSTALL_REQUIRES = [
 ]
+DEPENDENCY_LINKS = [
+    "git+https://github.com/facebook/prophet.git@master#egg=fbprophet&subdirectory=python",
+]
 EXTRAS_REQUIRE = {
     "cli": [
-        "ptpython",
+        "ptpython==0.41",
+        "prompt-toolkit<2.0.0",
         "pywatchman",
     ],
     "msp": [
@@ -51,6 +55,13 @@ EXTRAS_REQUIRE = {
     "spacy": [
         "spacy",
     ],
+    "prophet": [
+        "fbprophet",
+        "pandas",
+        "numpy",
+        "pyarrow",
+        "pystan",
+    ],
     "serve": [
         "pysquashfsimage",
         "beautifulsoup4",
@@ -60,6 +71,7 @@ EXTRAS_REQUIRE = {
         "requests",
         "tinydb",
         "yapf",
+        "opentracing<2,>=1.2.2",
         "Flask-Opentracing",
         "jaeger-client",
     ],
@@ -114,6 +126,7 @@ if __name__ == "__main__":
         keywords=KEYWORDS,
         long_description=read("README.rst"),
         entry_points=ENTRY_POINTS,
+        dependency_links=DEPENDENCY_LINKS,
         packages=PACKAGES,
         package_dir={"": "src"},
         zip_safe=False,

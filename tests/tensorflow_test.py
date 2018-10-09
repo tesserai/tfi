@@ -1,10 +1,13 @@
 import unittest
 
-import tfi.saved_model, tensorflow as tf
+import tfi.driver.tf as tf_driver
+import tensorflow as tf
+import tempfile
+import os.path
 
 class SavedModelTest(unittest.TestCase):
     def test_simple(self):
-        class Math(tfi.saved_model.Base):
+        class Math(tf_driver.Model):
             def __init__(self):
                 self._x = tf.placeholder(tf.float32)
                 self._y = tf.placeholder(tf.float32)
@@ -18,18 +21,19 @@ class SavedModelTest(unittest.TestCase):
         m = Math()
 
         # Prove that simple add and multiply work.
-        self.assertEqual(3.0, m.add(x=1.0, y=2.0).sum)
-        self.assertEqual(2.0, m.mult(x=1.0, y=2.0).prod)
+        self.assertEqual(3.0, m.add(x=1.0, y=2.0)['sum'])
+        self.assertEqual(2.0, m.mult(x=1.0, y=2.0)['prod'])
 
-        tfi.saved_model.export("math.saved_model", m)
-        # Prove that we can save it.
-        # Prove that we can restore it to a new class.
+        with tempfile.TemporaryDirectory() as tempdir:
+            path = os.path.join(tempdir, "math.saved_model")
+            tf_driver.dump(path, m)
+            # Prove that we can save it.
+            # Prove that we can restore it to a new class.
 
-        Math2 = tfi.saved_model.as_class("math.saved_model")
-        # Prove that we can save and restore it again.
-        m2 = Math2()
-        self.assertEqual(3.0, m2.add(x=1.0, y=2.0).sum)
-        self.assertEqual(2.0, m2.mult(x=1.0, y=2.0).prod)
+            m2 = tf_driver.load(path)
+            # Prove that we can save and restore it again.
+            self.assertEqual(3.0, m2.add(x=1.0, y=2.0)['sum'])
+            self.assertEqual(2.0, m2.mult(x=1.0, y=2.0)['prod'])
 
     def test_variables(self):
         # Prove that variables are serialized and restored as expected.

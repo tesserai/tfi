@@ -1,3 +1,4 @@
+import base64
 import json
 import inspect
 import opentracing
@@ -12,46 +13,36 @@ from werkzeug.exceptions import BadRequest
 from tfi import data as tfi_data
 from tfi.base import _recursive_transform
 
-def _replace_ref(v):
-  if not isinstance(v, dict) or '$ref' not in v:
-    return v
-  ref = v['$ref']
-  if ref.startswith('http://') or ref.startswith('https://'):
-    return tfi_data.file(ref)
-  return v
+from collections import OrderedDict
 
-def _field(req, field, annotation):
-  if field in req.files:
-    file = req.files[field]
-    return True, tfi_data.file(file, mimetype=file.mimetype)
-  if field in req.form:
-    v = req.form[field]
-    # TODO(adamb) Better to use some kind of "from_string" entry
-    if isinstance(annotation, dict) and 'dtype' in annotation:
-      v = annotation['dtype'](v)
-    else:
-      v = tfi_data.json(v)
-    return True, v
 
-  # TODO(adamb) Test!
-  json_data = req.get_json()
-  if json_data:
-    return (field in json_data, json_data.get(field, None))
-  return False, None
+def _decode_request(req):
+  if req.form is not None:
+    decoded = OrderedDict()
+    for field, value in req.form.items():
+      ch = value[0]
+      if ch != '{' and ch != '[' and ch != '"' and not value.isdecimal():
+        # HACK(adamb) Replace value with a json-encoded version of itself
+        value = json.dumps(value)
+      decoded[field] = tfi_data.json(value)
 
-def _default_if_empty(v, default):
-  return v if v is not inspect.Parameter.empty else default
+    for field, file in req.files.items():
+      decoded[field] = tfi_data.file(file, mimetype=file.mimetype)
+    return decoded
+  
+  if req.get_json() is not None:
+    return req.get_json()
+
+def _get_request_field(req, field, annotation):
+  if field not in req:
+    return False, None
+  
+  return True, req[field]
 
 def _maybe_plural(n, singular, plural):
   return singular if n == 1 else plural
 
-from tfi.tensor.frame import TensorFrame as _TensorFrame
-
-# TODO(adamb) Add tracing to /specialize
-# TODO(adamb) Switch _field logic to transforming to a "json" object.
-#   map uploaded files to base64-encoded files. Fix tensor mapping
-#   to "detect" base64 encodings for png, jpg files.
-
+from tfi.json import as_jsonable as _as_jsonable
 
 def _MissingParameters(missing):
   noun = _maybe_plural(len(missing), "parameter", "parameters")
@@ -64,32 +55,14 @@ def make_endpoint(model, method_name):
   param_annotations = {k: v.annotation for k, v in sig.parameters.items()}
   required = {k for k, v in sig.parameters.items() if v.default is inspect.Parameter.empty}
 
-  accept_mimetypes = {
-    # "image/png": lambda x: base64.b64encode(x),
-    "image/png": lambda x: x,
-    "text/plain": lambda x: x,
-    # Use python/jsonable so we to a recursive transform before jsonification.
-    "python/jsonable": lambda x: x,
-  }
-
-  def _transform_value(o):
-    if isinstance(o, _TensorFrame):
-      o = _TensorFrame(
-        *[
-          (shape, name, _recursive_transform(tensor, _transform_value))
-          for shape, name, tensor in o.tuples()
-        ],
-        **o.shape_labels(),
-      ).zipped(jsonable=True)
-
-    return tfi.tensor.codec.encode(accept_mimetypes, o)
-
   def fn():
+    decoded = _decode_request(request)
     d = {}
     missing = set(required)
     for k, ann in param_annotations.items():
-      ok, v = _field(request, k, ann)
+      ok, v = _get_request_field(decoded, k, ann)
       if ok:
+        v = decoded[k]
         missing.remove(k)
         d[k] = v
 
@@ -97,12 +70,9 @@ def make_endpoint(model, method_name):
       raise _MissingParameters(missing)
     
     result = method(**d)
-
-    r = _recursive_transform(result, _transform_value)
-    if r is not None:
-      result = r
+    jsonable = _as_jsonable(result)
     
-    response = make_response(jsonify(result), 200)
+    response = make_response(jsonify(jsonable), 200)
 
     return response
   return fn

@@ -5,9 +5,6 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
-import ast
-import importlib
-import inspect
 import os
 import os.path
 import sys
@@ -33,6 +30,8 @@ def _detect_model_object_kind(model):
             continue
         if c.__module__ == "tfi.driver.pytorch":
             return "pytorch"
+        if c.__module__ == "tfi.driver.prophet":
+            return "prophet"
         if c.__module__ == "tfi.driver.tf":
             return "tensorflow"
         if c.__module__ == "tfi.driver.msp":
@@ -90,7 +89,8 @@ parser.add_argument('--tracing-host', type=str, default=os.environ.get('JAEGER_H
 parser.add_argument('--tracing-tags', type=str, default=os.environ.get('JAEGER_TAGS', ''), help='Jaeger tags to include in traces to while serving')
 parser.add_argument('--internal-config', type=str, default=os.environ.get("TFI_INTERNAL_CONFIG", ""), help='For internal use.')
 parser.add_argument('--publish', default=False, action='store_true', help='Publish model')
-parser.add_argument('--bind', type=str, default='127.0.0.1:5000', help='Set address:port to serve model on')
+parser.add_argument('--bind', type=str, help='Set address:port to serve model on. Default behavior is 127.0.0.1 if available, otherwise 127.0.0.1:0')
+parser.add_argument('--bind-default', type=str, default='127.0.0.1:5000')
 parser.add_argument('--export', type=str, help='path to export to')
 parser.add_argument('--export-doc', type=str, help='path to export doc to')
 parser.add_argument('--watch', default=False, action='store_true', help='Watch given model and reload when it changes')
@@ -207,8 +207,6 @@ def run(argns, remaining_args):
         """
         segment_js = ""
 
-        host, port = argns.bind.split(':')
-        port = int(port)
         def on_bind(url):
             print("Serving at %s" % url)
 
@@ -217,6 +215,24 @@ def run(argns, remaining_args):
             for tag_entry in argns.tracing_tags.split(' '):
                 tag_k, tag_v = tag_entry.split('=', 1)
                 tracing_tags[tag_k] = tag_v
+
+        if argns.bind:
+            host, port = argns.bind.split(':')
+            port = int(port)
+        else:
+            host, initial_port = argns.bind_default.split(':')
+            initial_port = int(initial_port)
+            port = 0
+            for possible_port in range(initial_port, initial_port + 32):
+                import socket
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    try:
+                        s.bind((host, possible_port))
+                        port = possible_port
+                        break
+                    except socket.error as e:
+                        if e.errno == 98 or e.errno == 48:
+                            pass
 
         if model is None:
             from tfi.serve import run_deferred as serve_deferred

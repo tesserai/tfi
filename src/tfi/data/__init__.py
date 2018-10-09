@@ -117,6 +117,9 @@ class base64(_Source):
             r['$mimetype'] = self._mimetype
         return r
 
+    def open(self):
+        return _BytesIO(self.read())
+
     def read(self):
         return _base64.b64decode(self._encoded)
 
@@ -146,7 +149,7 @@ class url(_Source):
         return (self._url,) if self._mimetype is None else (self._url, self._mimetype)
 
     @idempotent
-    def _resolve_mimetype(self):
+    def read_mimetype(self):
         return self._mimetype or _mimetypes.guess_type(self._url)[0]
 
     def __setstate__(self, d):
@@ -163,13 +166,16 @@ class url(_Source):
             r['$mimetype'] = self._mimetype
         return r
 
+    def open(self):
+        return urllib.request.urlopen(self._url)
+
     def read(self):
         with urllib.request.urlopen(self._url) as f:
             return f.read()
 
     def __tensor__(self, ops, shape, dtype):
         with urllib.request.urlopen(self._url) as f:
-            return ops.decode_open_file(shape, dtype, self._resolve_mimetype(), f)
+            return ops.decode_open_file(shape, dtype, self.read_mimetype(), f)
 
 class path(_Source):
     def __init__(self, path=None, mimetype=None):
@@ -181,7 +187,7 @@ class path(_Source):
         return (self._path,) if self._mimetype is None else (self._path, self._mimetype)
 
     @idempotent
-    def _resolve_mimetype(self):
+    def read_mimetype(self):
         return self._mimetype or _mimetypes.guess_type("file://%s" % self._resolve_path())[0]
 
     def _resolve_path(self):
@@ -203,12 +209,15 @@ class path(_Source):
             r['$mimetype'] = self._mimetype
         return r
 
+    def open(self):
+        return open(self._resolve_path(), 'rb')
+
     def read(self):
         with open(self._resolve_path(), 'rb') as f:
             return f.read()
 
     def __tensor__(self, ops, shape, dtype):
-        return ops.decode_file_path(shape, dtype, self._resolve_mimetype(), self._resolve_path())
+        return ops.decode_file_path(shape, dtype, self.read_mimetype(), self._resolve_path())
 
 class stream(_Source):
     def __init__(self, _arg, _mimetype):
@@ -216,8 +225,14 @@ class stream(_Source):
         self._stream = _arg
         self._mimetype = _mimetype
 
+    def read_mimetype(self):
+        return self._mimetype
+
     def __repr__(self):
         return "tfi.data.base64(%r%s)" % (self._as_base64(), "" if self._mimetype is None else ", mimetype=%s" % self._mimetype)
+
+    def open(self):
+        return _BytesIO(self.read())
 
     def read(self):
         if not hasattr(self._stream, 'tell'):
@@ -265,6 +280,7 @@ def json(s):
     def _reify_ref_and_base64(v):
         if not isinstance(v, dict):
             return v
+
         if '$ref' in v:
             ref = v['$ref']
             if ref.startswith('http://') or ref.startswith('https://') or ref.startswith('tfi://'):

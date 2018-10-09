@@ -15,7 +15,7 @@ import warnings
 from tfi.base import _GetAttrAccumulator
 from tfi.parse.docstring import GoogleDocstring
 
-from tfi.pytorch.tensor_codec import as_tensor
+from tfi.driver.pytorch.tensor_codec import as_tensor
 
 import torch
 
@@ -206,11 +206,11 @@ class Base(object, metaclass=Meta):
 
         self.__tfi_init__()
 
-from tfi.pytorch.load import persistent_load
-from tfi.pytorch import kosher as _kosher
-from tfi.doc import record_documentation
+from tfi.driver.pytorch.load import persistent_load
+from tfi.driver.pytorch import kosher as _kosher
 
 def dump(export_path, model):
+    from tfi.doc import record_documentation
     record_documentation(model)
     pickle_module = _kosher.PickleModule(lambda m: m.startswith('zoo.'))
     pickle_module.persistent_load = persistent_load

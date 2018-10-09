@@ -1,3 +1,4 @@
+import ast
 import argparse
 import inspect
 
@@ -27,6 +28,25 @@ def _resolve_needed_params(method, have_kwargs=None):
 
     return needed
 
+def _parse_arg_fn(annotation):
+    dtype_fn = None
+    if isinstance(annotation, dict):
+        dtype_fn = annotation.get('dtype', None)
+    elif hasattr(annotation, 'dtype'):
+        dtype_fn = annotation.dtype
+    
+    def default_dtype_fn(s):
+        print("default_dtype_fn", s)
+        if s:
+            ch = s[0]
+            if ch == '[' or ch == '{' or ch.isdecimal():
+                return ast.literal_eval(s)
+        return s
+    default_dtype_fn.__name__ = 'literal'
+    if dtype_fn is None:
+        dtype_fn = default_dtype_fn
+    return lambda o: dtype_fn(_tfi_data_file(o[1:]) if o.startswith("@") else o)
+
 def resolve(leading_value, rest):
     resolution = _resolve_auto(leading_value)
     if 'model_fn_needed_params' not in resolution:
@@ -43,7 +63,7 @@ def resolve(leading_value, rest):
             '--%s' % name,
             required=param.default is empty,
             default=None if param.default is empty else param.default,
-            type=type(param.default) if param.annotation is inspect.Parameter.empty else param.annotation,
+            type=_parse_arg_fn({} if param.annotation is empty else param.annotation),
         )
     p.set_defaults(_method=None)
 
@@ -56,13 +76,6 @@ def resolve(leading_value, rest):
 
     def apply_model_method(method_name, ns_keys_to_kw, model, ns):
         return apply_fn(ns_keys_to_kw, getattr(model, method_name), ns)
-
-    def parse_arg_fn(annotation):
-        if isinstance(annotation, dict):
-            dtype_fn = annotation.get('dtype', lambda i: i)
-        elif hasattr(annotation, 'dtype'):
-            dtype_fn = annotation.dtype
-        return lambda o: dtype_fn(_tfi_data_file(o[1:]) if o.startswith("@") else o)
 
     subparsers = p.add_subparsers(help='sub-command help')
     for membername, member in resolution['model_members']:
@@ -81,7 +94,7 @@ def resolve(leading_value, rest):
                 dest=dest,
                 metavar=name.upper(),
                 default=None if param.default is empty else param.default,
-                type=parse_arg_fn({} if param.annotation is empty else param.annotation ),
+                type=_parse_arg_fn({} if param.annotation is empty else param.annotation ),
             )
         sp.set_defaults(_method=partial(apply_model_method, membername, ns_keys_to_kw))
 

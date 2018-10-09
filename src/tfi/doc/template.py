@@ -1,5 +1,7 @@
 from jinja2 import Template as JinjaTemplate
 
+from tfi.json import as_jsonable as _as_jsonable
+
 from tfi.format.html.bibtex import citation_bibliography_html
 from tfi.format.html.python import inspect_html
 from tfi.format.html.rst import parse_rst as _parse_rst
@@ -59,22 +61,8 @@ def render(
         return s
 
     def json_repr(v, max_width=None, max_seq_length=None):
-        accept_mimetypes = {
-            # "image/png": lambda x: base64.b64encode(x),
-            "image/png": lambda x: x,
-            "text/plain": lambda x: x,
-            # Use python/jsonable so we to a recursive transform before jsonification.
-            "python/jsonable": lambda x: x,
-        }
-
-        def xform_or_none(o):
-            t = tfi.tensor.codec.encode(accept_mimetypes, o)
-            return o if t is None else t
-
-        r = _recursive_transform(v, xform_or_none)
-        if r is not None:
-            v = r
-
+        jsonable = _as_jsonable(v)
+        return json.dumps(jsonable)
 
     def python_repr(v, max_width=None, max_seq_length=None):
         s, xform = inspect_html(v, max_width=max_width, max_seq_length=max_seq_length)
@@ -164,14 +152,14 @@ def render(
             # Hidden if any parent has inline style "display: none"
             parent = element.parent
             while parent:
-                if 'style' in parent.attrs and re.match('display:\s*none', parent['style']):
+                if 'style' in parent.attrs and re.match('display:\\s*none', parent['style']):
                     return False
                 parent = parent.parent
             return True
         
         soup = BeautifulSoup(html, "html.parser")
         data = soup.findAll(text=True)
-        return re.sub('\s+', ' ', " ".join(t.strip() for t in filter(visible, data)))
+        return re.sub('\\s+', ' ', " ".join(t.strip() for t in filter(visible, data)))
 
     description = visible_text_for(parsed['subtitle'])
 

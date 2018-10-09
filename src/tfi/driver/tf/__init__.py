@@ -206,7 +206,7 @@ def _resolve_instance_method_tensors(lazy_instance, method):
 
         return '%s <%s>' % (
             tensor.dtype.name,
-            ', '.join([None if n is None else str(n) for n in tensor.shape.as_list()]),
+            ', '.join(['?' if n is None else str(n) for n in tensor.shape.as_list()]),
         )
 
     def _enrich_docs_with_tensor_info(doc_fields, tensor_dict):
@@ -292,6 +292,8 @@ def _make_method(instance, signature_def, tensor_shapes, tensor_shape_labels, va
 
     input_tensor_names_sorted = sorted(signature_def.inputs.keys())
 
+    # TODO(adamb) Stop using session_handles. Use new functionality that allows output tensors to be used in feed_dct for placeholders.
+
     def session_handle_for(value, signature_def_input):
         if isinstance(value, (int, float, np.ndarray)):
             return None
@@ -331,6 +333,10 @@ def _make_method(instance, signature_def, tensor_shapes, tensor_shape_labels, va
                 input = signature_def.inputs[key]
                 value = kwargs[key]
                 # print('finding session_handle_for', key, value, input)
+                # HACK
+                # feed_dict[input.name] = value
+                # continue
+
                 sh = session_handle_for(value, input)
                 # print('found session_handle_for', sh)
                 if sh is None:
@@ -466,7 +472,8 @@ class Meta(type):
                     self.__tfi_refresh_conditions__ = _ConditionGenerator()
 
                 with graph.as_default():
-                    init(self, *a, **k)
+                    with self.__tfi_get_session__().as_default():
+                        init(self, *a, **k)
 
                     # Once init has executed, we can bind proper methods too!
                     if not hasattr(self, '__tfi_signature_defs__'):

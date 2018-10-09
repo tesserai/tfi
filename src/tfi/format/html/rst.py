@@ -40,6 +40,7 @@ class _DocutilsSettings(object):
         self.tab_width = 2
         self.warning_stream = None
         self.debug = False
+        self.compact_field_lists = False
         self.error_encoding = locale_encoding or 'ascii'
         self.error_encoding_error_handler = 'backslashreplace'
         self.language_code = 'en'
@@ -1029,7 +1030,7 @@ class _HTMLTranslator(nodes.NodeVisitor):
         wrappers = {# math_mode: (inline, block)
                     'mathml':  ('$%s$',   u'\\begin{%s}\n%s\n\\end{%s}'),
                     'html':    ('$%s$',   u'\\begin{%s}\n%s\n\\end{%s}'),
-                    'mathjax': ('\(%s\)', u'\\begin{%s}\n%s\n\\end{%s}'),
+                    'mathjax': ('\\(%s\\)', u'\\begin{%s}\n%s\n\\end{%s}'),
                     'latex':   (None,     None),
                    }
         wrapper = wrappers[self.math_output][math_env != '']
