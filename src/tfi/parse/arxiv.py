@@ -1,9 +1,17 @@
 import inspect
 import re
 
-arxiv_pdf_re = re.compile("(?:https?://)?(?:www\.)?arxiv\.org/pdf/(\d+\.\d+(?:v\d+)?).pdf", re.I)
-arxiv_url_re = re.compile("(?:https?://)?(?:www\.)?arxiv\.org/abs/(\d+\.\d+(?:v\d+)?)", re.I)
-arxiv_ref_re = re.compile("arxiv: *(\d+\.\d+)", re.I)
+def _as_re(subexp):
+  return re.compile("\\[ *%s *\\]|%s" % (subexp, subexp), re.I)
+
+
+arxiv_subexp = "(\\d+\\.\\d+(?:v\\d+)?)"
+arxiv_host = "(?:https?://)?(?:www\\.)?arxiv\\.org"
+arxiv_pdf_subexp = "%s/pdf/%s.pdf" % (arxiv_host, arxiv_subexp)
+arxiv_url_subexp = "%s/abs/%s" % (arxiv_host, arxiv_subexp)
+arxiv_pdf_re = _as_re(arxiv_pdf_subexp)
+arxiv_url_re = _as_re(arxiv_url_subexp)
+arxiv_ref_re = _as_re("arxiv: *(\\d+\\.\\d+)")
 
 def _discover_matches(p, s):
     return [(m.span(), m.groups()[0]) for m in p.finditer(s)]

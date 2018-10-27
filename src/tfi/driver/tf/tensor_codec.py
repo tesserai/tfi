@@ -65,8 +65,6 @@ def _decode_image(shape, dtype, bytes):
 
 class _driver(object):
     def _decode_file_path(self, shape, dtype, mimetype, path):
-        if path.startswith("//"):
-            path = "/Users/adamb/github/tesserai/tfi/src/tfi/data/%s" % path[2:]
         return _decode(
                 mimetype,
                 shape,
@@ -106,6 +104,9 @@ class _driver(object):
             return object, [], tf.int32, lambda o, shp: np.reshape(o, shp)
         if isinstance(object, float):
             return object, [], tf.float32, lambda o, shp: np.reshape(o, shp)
+        if isinstance(object, list) and len(object) > 0:
+            _, shape, dtype, reshape = self._detect_native_kind(object[0])
+            return object, [len(object), *shape], dtype, lambda o, shp: np.reshape(o, shp)
         if isinstance(object, np.ndarray):
             return (
                 tf.constant(object),

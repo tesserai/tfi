@@ -2,6 +2,17 @@ import re
 
 from string import Template
 
+# Wrapping text in {}s indicates that the wrapped text should be immune to
+# any transform being applied to the text as a whole (for example capitalization).
+# Since we aren't currently applying any transformations, just strip them all.
+def _join_bracequotes(s):
+    if s is None:
+        return None
+    return "".join(u for t in s.split("{") for u in t.split("}"))
+
+def _get_ent(ent, k, default=None):
+    return _join_bracequotes(ent.get(k, default))
+
 # Inspired by https://github.com/distillpub/template/blob/master/components/citation.js
 def _bibtex_link_string(ent):
     if "url" not in ent:
@@ -21,27 +32,27 @@ def _bibtex_link_string(ent):
     return ' &ensp;<a href="%s">[%s]</a>' % (url, label)
 
 def _bibtex_venue_string(ent):
-    cite = ent.get('journal', None) or ent.get('booktitle', None) or ""
+    cite = _get_ent(ent, 'journal', None) or _get_ent(ent, 'booktitle', None) or ""
     if "volume" in ent:
-        issue = ent.get('issue', None) or ent.get('number', None)
+        issue = _get_ent(ent, 'issue', None) or _get_ent(ent, 'number', None)
         issue = "("+issue+")" if issue is not None else ""
-        cite += ", Vol " + ent['volume'] + issue;
+        cite += ", Vol " + _get_ent(ent, 'volume') + issue;
 
     if "pages" in ent:
-        cite += ", pp. " + ent['pages']
+        cite += ", pp. " + _get_ent(ent, 'pages')
 
     if cite != "":
         cite += ". "
 
     if "publisher" in ent:
-        cite += ent['publisher']
+        cite += _join_bracequotes(_get_ent(ent, 'publisher'))
         if cite[-1] != ".":
             cite += "."
 
     return cite
 
 def _bibtex_author_string(ent, template, sep, final_sep):
-    names = ent['author'].split(" and ");
+    names = _get_ent(ent, 'author').split(" and ");
 
     def name_str(name):
         name = name.strip()
@@ -74,15 +85,16 @@ def _bibtex_doi_string(ent, newline=False):
     )
 
 def citation_hover_html(ent):
+    title = _get_ent(ent, 'title')
     cite = ""
-    cite += "<b>" + ent['title'] + "</b>"
+    cite += "<b>" + title + "</b>"
     cite += _bibtex_link_string(ent)
     cite += "<br>"
 
     a_str = _bibtex_author_string(ent, "${I} ${L}", ", ", ".")
     v_str = _bibtex_venue_string(ent).strip() + " " + ent['year'] + ". " + _bibtex_doi_string(ent, True)
 
-    if len(a_str+v_str) < min(40, len(ent['title'])):
+    if len(a_str+v_str) < min(40, len(title)):
       cite += a_str + " " + v_str
     else:
       cite += a_str + "<br>" + v_str
@@ -93,7 +105,8 @@ def citation_bibliography_html(ent):
     if ent is None:
         return "?"
 
-    cite = "<b>" + ent['title'] + "</b> "
+    title = _get_ent(ent, 'title')
+    cite = "<b>" + title + "</b> "
     cite += _bibtex_link_string(ent) + "<br>"
     cite += _bibtex_author_string(ent, "${L}, ${I}", ", ", " and ")
     if 'year' in ent or 'date' in ent:

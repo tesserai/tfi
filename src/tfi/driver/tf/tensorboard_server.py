@@ -1,13 +1,4 @@
-import logging as base_logging
-import os
-import socket
 import sys
-from werkzeug import serving
-
-from tensorflow.python.platform import app
-from tensorflow.python.platform import flags
-from tensorflow.python.platform import resource_loader
-from tensorflow.python.platform import tf_logging as logging
 
 from tensorboard.program import TensorBoard
 
