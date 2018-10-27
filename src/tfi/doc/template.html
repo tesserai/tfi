@@ -306,6 +306,13 @@
   </div>
 {%- endmacro %}
 
+{% macro facets_overview_embed(proto_base64) -%}
+<facets-overview id="elem"></facets-overview>
+<script>
+  document.querySelector("#elem").protoInput = "{{proto_base64}}";
+</script>
+{%- endmacro %}
+
 <!doctype html>
 <html>
   <head>
@@ -320,6 +327,8 @@
 
     <!-- <meta property="og:image" content="http://example.com/foo.png" /> -->
     <!-- <meta property="og:site_name" content="Tesserai"/> -->
+
+    {% if facets_overview_proto_base64 %}<link rel="import" href="static/facets-overview.html">{% endif %}
     <!-- <meta property="og:url" content="http://example.com/canonical-url" /> -->
 
     <link rel="stylesheet" href="static/primer-tooltip.css" />
@@ -448,9 +457,18 @@
     </section>
     {% endfor %}
 
-    {% if references | length > 0 or hyperparameters | length > 0 or implementation_notes | length > 0 or appendix_sections | length > 0 %}
+    {% if facets_overview_proto_base64 or references | length > 0 or hyperparameters | length > 0 or implementation_notes | length > 0 or appendix_sections | length > 0 %}
 
     <div id="appendix">
+    {% if facets_overview_proto_base64 -%}
+    <section class="data-facets-overview" id="data-facets-overview">
+      <h2>Dataset Feature Statistics</h2>
+      <div style="padding-top: 1rem;">
+      {{facets_overview_embed(facets_overview_proto_base64)}}
+      </div>
+    </section>
+    {% endif -%}
+
     {% for section in appendix_sections %}
       {{section['body']}}
     {% endfor %}

@@ -13,6 +13,7 @@ from yapf.yapflib.style import CreateGoogleStyle
 
 from collections import OrderedDict
 
+import base64
 import json
 import shlex
 import os.path as _os_path
@@ -41,6 +42,7 @@ def render(
         include_snapshot,
         proto,
         host,
+        facets_overview_proto=None,
         extra_scripts=""):
 
     with open(_page_template_path, encoding='utf-8') as f:
@@ -213,6 +215,10 @@ def render(
             },
         )
 
+    facets_overview_proto_base64 = None
+    if facets_overview_proto:
+        facets_overview_proto_base64 = base64.b64encode(facets_overview_proto).decode('utf-8')
+
     return t.render(
             read_template_file=_read_template_file,
             languages=languages,
@@ -225,6 +231,7 @@ def render(
             bibliography_cite=citation_bibliography_html,
             overview=parsed['body'],
             body_sections=body_sections,
+            facets_overview_proto_base64=facets_overview_proto_base64,
             appendix_sections=appendix_sections,
             authors=authors,
             hyperparameters=hyperparameters,
