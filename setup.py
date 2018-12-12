@@ -68,7 +68,7 @@ EXTRAS_REQUIRE = {
     "serve": [
         "pysquashfsimage",
         "beautifulsoup4",
-        "bjoern",
+        "bjoern>=2.2.3",
         "docutils",
         "Flask",
         "requests",
