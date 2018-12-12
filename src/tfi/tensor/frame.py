@@ -12,7 +12,7 @@ class TensorFrame(object):
                 ready[name] = value_fn(tensor)
                 continue
             if len(shape) == 0: # Scalars can't be zipped, they're ready as-is.
-                ready[name] = value_fn(tensor.item())
+                ready[name] = value_fn(tensor.item()) if hasattr(tensor, 'item') else tensor
                 continue
             dimname = shape[0]
             if dimname is None:
@@ -64,6 +64,9 @@ class TensorFrame(object):
         }
         self._shape_labels = kwargs
 
+    def __contains__(self, k):
+        return k in self._data_dict
+
     def __getitem__(self, ix):
         return self._data_dict[ix]
 
@@ -85,19 +88,7 @@ class TensorFrame(object):
     def keys(self):
         return self._data_dict.keys()
 
-    def zipped(self, *, filter=None, jsonable=False, dictclass=None):
-        if jsonable:
-            def value_fn(x):
-                if isinstance(x, np.ndarray):
-                    if x.dtype == object:
-                        return [value_fn(e) for e in x.tolist()]
-                    return x.tolist()
-                if isinstance(x, bytes):
-                    return x.decode('utf-8')
-                return x
-        else:
-            def value_fn(x): return x
-
+    def zipped(self, *, filter=None, dictclass=None):
         data = self._data
         if filter:
             data = [
@@ -109,7 +100,7 @@ class TensorFrame(object):
         if not dictclass:
             dictclass = dict
 
-        return TensorFrame._zip(data, self._shape_labels, value_fn=value_fn, dictclass=dictclass)
+        return TensorFrame._zip(data, self._shape_labels, value_fn=lambda x: x, dictclass=dictclass)
 
     # def __repr__(self):
     #     return self.zipped().__repr__()

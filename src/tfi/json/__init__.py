@@ -1,30 +1,41 @@
 from tfi.tensor.frame import TensorFrame as _TensorFrame
-from tfi.tensor.codec import encode as _tensor_encode
+from tfi.tensor.codec import encode as _encode_tensor
 from tfi.base import _recursive_transform
 
+from collections import OrderedDict as _OrderedDict
 import base64
 import numpy as np
 
-_ACCEPT_MIMETYPES = {
-  # "image/png": lambda x: base64.b64encode(x),
-  "image/png": lambda x: x,
-  "text/plain": lambda x: x,
-  # Use python/jsonable so we to a recursive transform before jsonification.
-  "python/jsonable": lambda x: x,
-}
+import json
+
+_ACCEPT_MIMETYPES = _OrderedDict([
+  ("image/png", lambda x: {
+    '$base64': base64.b64encode(x).decode('utf-8'),
+    '$mimetype': 'image/png',
+  }),
+  ("image/jpeg", lambda x: {
+    '$base64': base64.b64encode(x).decode('utf-8'),
+    '$mimetype': 'image/jpeg',
+  }),
+  # "text/plain": lambda x: x,
+])
 
 _TRANSFORMS = {}
 
-def _transform_value(o):
+def _encode_transformed_tensor_value(o):
   t = type(o)
   if t in _TRANSFORMS:
     o = _TRANSFORMS[t](o)
 
-  return _tensor_encode(_ACCEPT_MIMETYPES, o)
+  return _encode_tensor(_ACCEPT_MIMETYPES, o)
+
+
+# Use python/jsonable so we to a recursive transform before jsonification.
+_ACCEPT_MIMETYPES["python/jsonable"] = _encode_transformed_tensor_value
 
 
 def as_jsonable(result):
-  r = _recursive_transform(result, _transform_value)
+  r = _recursive_transform(result, _encode_transformed_tensor_value)
   if r is not None:
     return r
   return result
@@ -32,11 +43,11 @@ def as_jsonable(result):
 
 _TRANSFORMS[_TensorFrame] = lambda o: _TensorFrame(
       *[
-        (shape, name, _recursive_transform(tensor, _transform_value))
+        (shape, name, _recursive_transform(tensor, _encode_transformed_tensor_value))
         for shape, name, tensor in o.tuples()
       ],
       **o.shape_labels(),
-    ).zipped(jsonable=True),
+    ).zipped()
 
 _TRANSFORMS[np.int32] = lambda o: int(o)
 
