@@ -28,6 +28,10 @@ def _decode_json(shape, dtype, bytes):
 
 @_register_decoder(["image/jpeg", "image/png"])
 def _decode_image(shape, dtype, bytes):
+    if dtype == tf.string:
+        if shape is None or len(shape) == 0:
+            return bytes
+
     channels = None
     h = None
     w = None
