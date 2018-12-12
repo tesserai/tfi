@@ -143,7 +143,7 @@ def render(
     def visible_text_for(html):
         import re
         from bs4 import BeautifulSoup
-        from bs4.element import Comment, NavigableString
+        from bs4.element import Comment
         
         def visible(element):
             if element.parent.name in ['style', 'script', '[document]', 'head', 'title']:
