@@ -93,7 +93,7 @@ class Meta(type):
                 # Once init has executed, we can bind proper methods too!
                 if not hasattr(self, '__tfi_signature_defs__'):
                     self.__tfi_signature_defs__ = OrderedDict()
-                    self.__tfi_signature_def_docs__ = OrderedDict()
+                    self.__tfi_signature_defs_docs__ = OrderedDict()
                     docstrings = {}
                     if hasattr(self, '__tfi_docstrings__'):
                       docstrings = self.__tfi_docstrings__ or docstrings
@@ -105,7 +105,7 @@ class Meta(type):
                         docstring = docstrings.get(method_name, None)
                         doc, input_annotations, output_annotations = _resolve_instance_method_tensors(self, method, docstring=docstring)
 
-                        self.__tfi_signature_def_docs__[method_name] = doc
+                        self.__tfi_signature_defs_docs__[method_name] = doc
                         self.__tfi_signature_defs__[method_name] = dict(
                             inputs=input_annotations,
                             outputs=output_annotations)

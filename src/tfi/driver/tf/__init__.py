@@ -391,7 +391,7 @@ def _make_method(instance, signature_def, tensor_shapes, tensor_shape_labels, va
 
 def _infer_signature_defs(class_dict, instance):
     signature_defs = OrderedDict()
-    signature_def_docs = OrderedDict()
+    signature_defs_docs = OrderedDict()
     estimator_modes = OrderedDict()
 
     fields = instance.__dict__
@@ -422,11 +422,11 @@ def _infer_signature_defs(class_dict, instance):
 
     for method_name in raw_methods.keys():
         resolved_method = _resolve_attr(method_name)
-        signature_def_docs[method_name] = resolved_method.doc
+        signature_defs_docs[method_name] = resolved_method.doc
         signature_defs[method_name] = resolved_method.build_signature_def()
         estimator_modes[method_name] = resolved_method.estimator_mode
 
-    return signature_defs, signature_def_docs, estimator_modes
+    return signature_defs, signature_defs_docs, estimator_modes
 
 class Meta(type):
     @staticmethod
@@ -491,13 +491,14 @@ class Meta(type):
                 if not hasattr(self, '__tfi_refresh_conditions__'):
                     self.__tfi_refresh_conditions__ = _ConditionGenerator()
 
+                # with self.__tfi_get_session__().as_default():
                 with graph.as_default():
                     with self.__tfi_get_session__().as_default():
                         init(self, *a, **k)
 
                     # Once init has executed, we can bind proper methods too!
                     if not hasattr(self, '__tfi_signature_defs__'):
-                        self.__tfi_signature_defs__, self.__tfi_signature_def_docs__, self.__tfi_estimator_modes__ = _infer_signature_defs(d, self)
+                        self.__tfi_signature_defs__, self.__tfi_signature_defs_docs__, self.__tfi_estimator_modes__ = _infer_signature_defs(d, self)
 
                     if not hasattr(self, '__tfi_vars_initialized__'):
                         self.__tfi_vars_initialized__ = set()
@@ -678,7 +679,7 @@ class Model(object, metaclass=Meta):
                 saver = tf.train.Saver(var_list=vars)
                 saver.restore(self.__tfi_get_session__(), saved_prefix)
 
-    def __tfi_hyperparameters_dict__(self):
+    def __tfi_hyperparameter_dict__(self):
         return {
             name: val
             for (name, _, val, _) in self.__tfi_hyperparameters__
@@ -709,7 +710,7 @@ class Model(object, metaclass=Meta):
 
         try:
             # Compute init kwargs based on the hyperparameters needed by the latest one
-            hparams = self.__tfi_hyperparameters_dict__()
+            hparams = self.__tfi_hyperparameter_dict__()
             empty = inspect.Signature.empty
             init_kw = {
                 name: hparams.get(name, param.default if param.default != empty else None)
@@ -1018,7 +1019,7 @@ def as_estimator(model_or_class, model_dir=None):
                         'train': [_SessionEndHook(train_hook)],
                     }),
             config=config,
-            params=instance.__tfi_hyperparameters_dict__(),
+            params=instance.__tfi_hyperparameter_dict__(),
             warm_start_from=warm_start_from,
         )
         return estimator

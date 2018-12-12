@@ -117,8 +117,8 @@ def run(globals=None, locals=None, history_filename=None, model=None, module=Non
 
         # Print hyperparameters and model methods
         ctorargs = "..."
-        if hasattr(model, '__tfi_hyperparameters__'):
-            ctorargs = ", ".join(["%s=%s" % (k, v) for k, v in model.__tfi_hyperparameters_dict__().items()])
+        if hasattr(model, '__tfi_hyperparameter_dict__'):
+            ctorargs = ", ".join(["%s=%s" % (k, v) for k, v in model.__tfi_hyperparameter_dict__().items()])
         print("Initializing environment...")
         print("m = %s(%s)" % (model.__class__.__name__, ctorargs))
         methods = inspect.getmembers(model, predicate=inspect.ismethod)
