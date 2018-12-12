@@ -649,13 +649,19 @@ nav select:focus {
   overflow: hidden;
 }
 
+.logo-image, .logo-image-invert {
   max-width: 180px;
+  padding-top: 1rem;
   padding-bottom: 0px;
+  opacity: .6;
+}
+
+img.logo-image-invert {
+  filter: invert(100%) grayscale(100%);
 }
 
 img.logo-image {
   filter: grayscale(100%);
-  opacity: .6;
 }
 
 /* BACK TO TOP */
