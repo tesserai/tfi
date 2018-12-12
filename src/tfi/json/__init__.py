@@ -17,6 +17,7 @@ _ACCEPT_MIMETYPES = _OrderedDict([
     '$base64': base64.b64encode(x).decode('utf-8'),
     '$mimetype': 'image/jpeg',
   }),
+  # "image/png": lambda x: x,
   # "text/plain": lambda x: x,
 ])
 
@@ -67,3 +68,21 @@ try:
   _TRANSFORMS[_pyarrow.lib.Buffer] = lambda o: base64.b64encode(o.to_pybytes()).decode('utf-8')
 except ImportError:
   pass
+
+
+def _json_default(o):
+    if not hasattr(o, '__json__'):
+        raise TypeError("Unserializable object {} of type {}".format(o, type(o)))
+    return o.__json__()
+
+def dump(obj, f):
+    return json.dump(obj, f, default=_json_default)
+
+def dumps(obj):
+    return json.dumps(obj, default=_json_default)
+
+def load(f):
+  return json.load(f)
+
+def loads(s):
+  return json.loads(s)
