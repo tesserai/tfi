@@ -62,6 +62,9 @@ EXTRAS_REQUIRE = {
         "pyarrow",
         "pystan",
     ],
+    "facets": [
+        "facets_overview",
+    ],
     "serve": [
         "pysquashfsimage",
         "beautifulsoup4",

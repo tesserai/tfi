@@ -1,5 +1,5 @@
 include *.md *.txt LICENSE shell.nix
 include src/tfi/doc/*.html
-include src/tfi/static/*.js src/tfi/static/*.css src/tfi/static/photoswipe/*.* src/tfi/static/photoswipe/default-skin/*.*
+include src/tfi/static/*.js src/tfi/static/*.css src/tfi/static/*.html src/tfi/static/photoswipe/*.* src/tfi/static/photoswipe/default-skin/*.*
 
 recursive-include tests *.py

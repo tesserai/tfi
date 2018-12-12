@@ -172,6 +172,7 @@ def documentation(model):
             prep_python_method(method_name, method_doc)
             for method_name, method_doc in model.__tfi_signature_def_docs__.items()
         ],
+        "facets_overview_proto": model.__tfi_facets_overview_proto__ if hasattr(model, '__tfi_facets_overview_proto__') else None,
         "hyperparameters": [
             prep_hyperparameter(*hparam_tuple)
             for hparam_tuple in model.__tfi_hyperparameters__

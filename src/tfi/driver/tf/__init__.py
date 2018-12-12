@@ -731,6 +731,12 @@ def as_class(saved_model_path, tag_set=tf.saved_model.tag_constants.SERVING):
             example_specs = json.load(f)
 
     signature_defs = _read_signature_defs(saved_model_dir)
+    
+    facets_overview_statistics_proto = None
+    facets_overview_statistics_path = os.path.join(saved_model_dir, 'assets.extra/doc/facets_overview_feature_statistics.pb')
+    if os.path.exists(facets_overview_statistics_path):
+        with open(facets_overview_statistics_path, 'rb') as f:
+            facets_overview_statistics_proto = f.read()
 
     def _tensor_info_str(tensor_info):
         if tensor_info.tensor_shape.unknown_rank:
@@ -826,6 +832,7 @@ def as_class(saved_model_path, tag_set=tf.saved_model.tag_constants.SERVING):
             for method_name, signature_def in signature_defs.items()
         },
         '__tfi_hyperparameters__': metadata_json.get('hyperparameters', []),
+        '__tfi_facets_overview_proto__': facets_overview_statistics_proto,
         '__tfi_tempdirs__': tempdirs,
         '__tfi_estimator_modes__': {
             # For now we assume that *all* methods in a SavedModel should be used for estimator inference
