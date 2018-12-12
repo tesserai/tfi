@@ -73,6 +73,27 @@ def make_app(model, tracer, model_file_fn=None, extra_scripts=""):
       # just return the codepath directly.
       return send_file(model_file_fn())
 
+  # Subscribers to this model's event stream might be late.
+  # provide a response that looks like the end of the upload
+  # stream so they know to refresh.
+  @app.route('/meta/events')
+  def meta_events():    
+    headers = {
+	    'Cache-Control': 'no-cache',
+	    'Connection': 'keep-alive',
+      'x-envoy-upstream-rq-timeout-ms': '0',
+    }
+    return Response(
+      """event: status
+data: {"status":"done"}
+
+""",
+      200,
+      content_type='text/event-stream',
+      headers=headers,
+    )
+
+
   @app.route("/object/<path:objectpath>", methods=["GET"])
   def get_object(objectpath):
     asset_path = _asset_path(model, objectpath)
