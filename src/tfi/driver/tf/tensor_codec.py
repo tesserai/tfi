@@ -101,24 +101,33 @@ class _driver(object):
     def _are_shapes_compatible(self, candidate_dims, shape):
         return tf.TensorShape(candidate_dims).is_compatible_with(tf.TensorShape(shape))
 
-    def _detect_native_kind(self, object):
-        if isinstance(object, str):
-            return object, [], tf.string, lambda o, shp: np.reshape(o, shp)
-        if isinstance(object, int):
-            return object, [], tf.int32, lambda o, shp: np.reshape(o, shp)
-        if isinstance(object, float):
-            return object, [], tf.float32, lambda o, shp: np.reshape(o, shp)
-        if isinstance(object, list) and len(object) > 0:
-            _, shape, dtype, reshape = self._detect_native_kind(object[0])
-            return object, [len(object), *shape], dtype, lambda o, shp: np.reshape(o, shp)
-        if isinstance(object, np.ndarray):
+    def _detect_native_kind(self, obj):
+        def _np_reshape_tensor(o, shp):
+            shp = [dim if dim is not None else -1 for dim in shp]
+            r = np.reshape(o, shp)
+            print("_np_reshape_tensor", r)
+            return r
+
+        if isinstance(obj, (str, bytes)):
+            return obj, [], tf.string, _np_reshape_tensor
+        if isinstance(obj, int):
+            return obj, [], tf.int32, _np_reshape_tensor
+        if isinstance(obj, float):
+            return obj, [], tf.float32, _np_reshape_tensor
+        if isinstance(obj, np.ndarray):
             return (
-                tf.constant(object),
-                object.shape,
-                tf.as_dtype(object.dtype),
-                lambda o, shp: np.reshape(o, shp)
+                tf.constant(obj),
+                obj.shape,
+                tf.as_dtype(obj.dtype),
+                _np_reshape_tensor
             )
-        return object, None, None, None
+        if isinstance(obj, list) and len(obj) > 0:
+            _, shape, dtype, reshape = self._detect_native_kind(obj[0])
+            # Perhaps this is a "native" list? Recurse if so.
+            if reshape is not None:
+                nd = np.array(obj, ndmin=len(shape)+1)
+                return nd, [len(obj), *shape], dtype, _np_reshape_tensor
+        return obj, None, None, None
 
 from tfi.tensor.codec import _BaseAdapter
 
