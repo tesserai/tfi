@@ -2,36 +2,29 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import argparse
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict
 import inspect
 import functools
 import os
 import re
-import sys
 import threading
 import types
-import warnings
 import datetime
 
 import tensorflow as tf
 import numpy as np
-from tensorflow.core.framework import types_pb2
-from tensorflow.python.client import session
-from tensorflow.python.debug.wrappers import local_cli_wrapper
-from tensorflow.python.framework import ops as ops_lib
 
-import re
 from tfi.base import _GetAttrAccumulator
 
 from tfi.parse.docstring import GoogleDocstring
 
-from tfi.tensor.codec import _BaseAdapter
 import tfi.driverconfig.tf
 from tfi.driver.tf.tensor_codec import as_tensor
 
 import tfi.tensor.frame
 import tfi.driver.tf.checkpoint
+import tfi.driver.tf.asset
+import tfi.driver.tf.documentation
 
 def _walk(out_tensors, in_tensors, fn):
     to_visit = set(out_tensors)
@@ -294,19 +287,25 @@ def _make_method(instance, signature_def, tensor_shapes, tensor_shape_labels, va
 
     # TODO(adamb) Stop using session_handles. Use new functionality that allows output tensors to be used in feed_dct for placeholders.
 
+    # If model expects an example, we need to synthesis it.
     def session_handle_for(value, signature_def_input):
-        if isinstance(value, (int, float, np.ndarray)):
-            return None
+        if isinstance(value, (bool, int, float, np.ndarray, bytes, str)):
+            return False, None
+
+        # If it's a dict, then use DictToMessage and then SerializeToString or whatever the JSON protobuf thing is...
+
         # TODO(adamb) This might append to the default graph. These appends
         #     should be cached and idempotent. The added nodes should be
         #     reused if possible.
-        v = as_tensor(
-                value,
-                tf.TensorShape(signature_def_input.tensor_shape).as_list(),
-                tf.as_dtype(signature_def_input.dtype))
-        if v is None:
-            return v
-        return tf.get_session_handle(v)
+        tensor_shape = tf.TensorShape(signature_def_input.tensor_shape)
+        shape_list = tensor_shape.as_list() if tensor_shape.dims is not None else None
+        dtype = tf.as_dtype(signature_def_input.dtype)
+        v = as_tensor(value, shape_list, dtype)
+        if not isinstance(v, tf.Tensor):
+            return False, v
+        
+        return True, tf.get_session_handle(v)
+
 
     def _impl(self, **kwargs):
         feed_dict = {}
@@ -337,21 +336,26 @@ def _make_method(instance, signature_def, tensor_shapes, tensor_shape_labels, va
                 # feed_dict[input.name] = value
                 # continue
 
-                sh = session_handle_for(value, input)
-                # print('found session_handle_for', sh)
+                is_h, sh = session_handle_for(value, input)
+                print('found session_handle_for', sh, type(value))
                 if sh is None:
                     feed_dict[input.name] = value
+                elif not is_h:
+                    feed_dict[input.name] = sh
                 else:
                     handle_keys.append(input.name)
                     handle_in.append(sh)
 
+            # print("about to session.run here for", handle_in)
             for key, fh in zip(handle_keys, session.run(handle_in)):
                 feed_dict[key] = fh
                 handles.append(fh)
 
+            print("about to session.run there", output_tensor_names_sorted, feed_dict, handles)
             result = session.run(
                 output_tensor_names_sorted,
                 feed_dict=feed_dict)
+            # print("result", result)
 
             for fh in handles:
                 tf.delete_session_tensor(fh)
@@ -454,16 +458,32 @@ class Meta(type):
                 if not hasattr(self, '__tfi_hyperparameters__'):
                     hparam_docs = {}
                     if hasattr(init, '__doc__') and init.__doc__:
-                        doc = GoogleDocstring(obj=init).result()
-                        for hparam_name, hparam_type, hparam_doc in doc['args']:
+                        init_doc = GoogleDocstring(obj=init).result()
+                        for hparam_name, hparam_type, hparam_doc in init_doc['args']:
                             hparam_docs[hparam_name] = hparam_doc
 
                     ba = inspect.signature(init).bind(self, *a, **k)
                     ba.apply_defaults()
+                    hparam_items = list(ba.arguments.items())[1:] # ignore self
                     self.__tfi_hyperparameters__ = [
                         (hparam_name, type(hparam_val), hparam_val, hparam_docs.get(hparam_name, []))
-                        for hparam_name, hparam_val in list(ba.arguments.items())[1:] # ignore self
+                        for hparam_name, hparam_val in hparam_items
                     ]
+
+
+                if hasattr(self, '__doc__') and self.__doc__:
+                    model_doc = GoogleDocstring(obj=self).result()
+                    model_doc_sections = model_doc['sections']
+                    if not hasattr(self, '__tfi_name__'):
+                        self.__tfi_name__ = type(self).__name__
+
+                    if not hasattr(self, '__tfi_overview__'):
+                        # NOTE(adamb) Since we don't want to be parsing rst here, we'll just rewrite
+                        #     it to include detected citations. Expect that this rst will be parsed
+                        #     for real when rendering HTML.
+                        text_sections = [v for t, v in model_doc_sections if t == 'text']
+                        overview = "\n".join([l for t in text_sections for l in t])
+                        self.__tfi_overview__ = overview
 
                 self.__tfi_graph__ = graph
                 self.__tfi_session__ = None
@@ -505,6 +525,32 @@ class Meta(type):
                             output_tensor_shapes, output_tensor_shape_labels = self.__tfi_get_signature_def_output_shapes__(method_name)
                             method = _make_method(self, sigdef, output_tensor_shapes, output_tensor_shape_labels, method_vars)
                             setattr(self, method_name, method)
+
+                if not hasattr(self, '__tfi_doc__'):
+                    sdd = self.__tfi_signature_defs_docs__
+                    self.__tfi_doc__ = tfi.driver.tf.documentation.ModelDocumentation(
+                        hyperparameters=self.__tfi_hyperparameters__,
+                        name=self.__tfi_name__,
+                        overview=self.__tfi_overview__,
+                        methods=OrderedDict([
+                            (
+                                method_name,
+                                tfi.driver.tf.documentation.MethodDocumentation(
+                                    name=method_name,
+                                    overview=sdd[method_name]['sections'],
+                                    inputs=sdd[method_name]['args'],
+                                    outputs=sdd[method_name]['returns'],
+                                    example=tfi.driver.tf.documentation.MethodExample(
+                                        inputs={
+                                            input_name: eval("\n".join(input_val_lines), {}, {'m': self, 'tfi': tfi})
+                                            for input_name, _, input_val_lines in sdd[method_name]['example args']
+                                        }
+                                    ),
+                                ),
+                            )
+                            for method_name, signature_def in self.__tfi_signature_defs__.items()
+                        ]),
+                    )
 
                 for fn in self.__tfi_refresh_watchers__:
                     fn(self)
@@ -724,12 +770,6 @@ def as_class(saved_model_path, tag_set=tf.saved_model.tag_constants.SERVING):
                 else:
                     break
 
-    example_specs = {}
-    example_specs_path = os.path.join(saved_model_dir, 'assets.extra', 'tfi/example-specs.json')
-    if os.path.exists(example_specs_path):
-        with open(example_specs_path) as f:
-            example_specs = json.load(f)
-
     signature_defs = _read_signature_defs(saved_model_dir)
     
     facets_overview_statistics_proto = None
@@ -738,100 +778,39 @@ def as_class(saved_model_path, tag_set=tf.saved_model.tag_constants.SERVING):
         with open(facets_overview_statistics_path, 'rb') as f:
             facets_overview_statistics_proto = f.read()
 
-    def _tensor_info_str(tensor_info):
-        if tensor_info.tensor_shape.unknown_rank:
-            return '%s ?' % tf.as_dtype(tensor_info.dtype).name
 
-        return '%s <%s>' % (
-            tf.as_dtype(tensor_info.dtype).name,
-            ', '.join(['?' if dim.size == -1 else str(dim.size) for dim in tensor_info.tensor_shape.dim]),
-        )
+    classname = os.path.basename(saved_model_path)
 
-
-    example_proto = {}
-    example_json_path = os.path.join(saved_model_dir, 'assets.extra/doc/examples.json')
-    if os.path.exists(example_json_path):
-        with open(example_json_path) as f:
-            import json
-            example_json = json.load(f)
-            from google.protobuf.json_format import ParseDict
-            with tf.Session(graph=tf.Graph()) as session:
-                def feature_for_tensor_info(tensor_info):
-                    tensor_shape = tensor_info.tensor_shape.dim[1:]
-                    dtype = tf.DType(tensor_info.dtype)
-                    if tensor_shape[-1].size != -1:
-                        return tf.FixedLenFeature(dtype=dtype, shape=[dim.size for dim in tensor_shape])
-                    return tf.VarLenFeature(dtype=dtype)
-
-                def _repr(tensor_value):
-                    if isinstance(tensor_value, tf.SparseTensorValue):
-                        # THIS IS VERY WRONG. ASSUMES A RAGGED SPARSE TENSOR.
-                        return _repr(tensor_value.values)
-                    if tensor_value.dtype.kind == 'O':
-                        tensor_value = np.vectorize(lambda x: x.decode('utf-8'))(tensor_value)
-                    return repr([tensor_value.tolist()]) 
-
-                def example_for(signature_def_tensors, example_dict):
-                    example_features = {
-                        name: feature_for_tensor_info(tensor_info)
-                        for name, tensor_info in signature_def_tensors.items()
-                    }
-                    asdfasdf = session.run(
-                        tf.parse_single_example(
-                            ParseDict(example_dict, tf.train.Example()).SerializeToString(),
-                            features=example_features))
-                    parsed_example = [
-                        (
-                            k,
-                            v.dtype.name if not isinstance(v, tf.SparseTensorValue) else v.values.dtype.name,
-                            [_repr(v)],
-                        )
-                        for k, v in asdfasdf.items()
-                    ]
-                    return parsed_example
-                example_proto = {
-                    method_name: {
-                        'example args': example_for(signature_defs[method_name].inputs, example_info['example args']),
-                        'example result': example_for(signature_defs[method_name].outputs, example_info['example result']),
-                    }
-                    for method_name, example_info in example_json.items()
-                }
-
-    metadata_json = {}
-    metadata_json_path = os.path.join(saved_model_dir, 'assets.extra/doc/metadata.json')
-    if os.path.exists(metadata_json_path):
-        with open(metadata_json_path) as f:
-            import json
-            metadata_json = json.load(f)
-    method_metadatas = {}
-    if 'methods' in metadata_json:
-        for method_metadata in metadata_json['methods']:
-            method_metadatas[method_metadata['name']] = method_metadata
-    
-    
-    # TODO(adamb) Choose a better name than CUSTOMTYPE.
-    return type('CUSTOMTYPE', (Model,), {
+    doc = tfi.driver.tf.documentation.read(saved_model_dir, signature_defs)
+    return type(classname, (Model,), {
         '__init__': lambda s:
                 loader.load(s.__tfi_get_session__(), tag_set.split(','), saved_model_dir),
-        '__name__': metadata_json.get('name', None),
-        '__tfi_signature_defs__': signature_defs,
-        '__tfi_signature_def_docs__': {
+        '__name__': doc.name(),
+        '__doc__': doc.docstring(),
+        '__tfi_doc__': doc,
+
+        '__tfi_name__': doc.name(),
+        '__tfi_overview__': doc.overview(),
+        '__tfi_hyperparameters__': doc.hyperparameters(),
+        '__tfi_signature_defs_docs__': {
             method_name: {
-                'sections': [],
-                'args': [
-                    (name, _tensor_info_str(tensor), '')
-                    for name, tensor in signature_def.inputs.items()
+                'name': method_name,
+                'sections': method_doc.overview(),
+                'args': method_doc.inputs(),
+                'returns': method_doc.outputs(),
+                'example args': [
+                    (
+                        input_name,
+                        None,
+                        [input_repr],
+                    )
+                    for input_name, input_repr in method_doc.example().input_reprs().items()
                 ],
-                'returns': [
-                    (name, _tensor_info_str(tensor), '')
-                    for name, tensor in signature_def.outputs.items()                    
-                ],
-                **example_proto.get(method_name, {}),
-                **method_metadatas.get(method_name, {}),
             }
-            for method_name, signature_def in signature_defs.items()
+            for method_name, method_doc in doc.methods().items()
         },
-        '__tfi_hyperparameters__': metadata_json.get('hyperparameters', []),
+
+        '__tfi_signature_defs__': signature_defs,
         '__tfi_facets_overview_proto__': facets_overview_statistics_proto,
         '__tfi_tempdirs__': tempdirs,
         '__tfi_estimator_modes__': {
@@ -839,7 +818,6 @@ def as_class(saved_model_path, tag_set=tf.saved_model.tag_constants.SERVING):
             method_name: 'infer'
             for method_name in signature_defs.keys()
         },
-        '__tfi_signature_def_example_specs__': example_specs,
         '__tfi_refresh_conditions__': _ConditionGenerator(),
     })
 
@@ -889,6 +867,11 @@ def dump(export_path, model):
               legacy_init_op=legacy_init_op,
               signature_def_map=model.__tfi_signature_defs__)
         builder.save()
+
+        tfi.driver.tf.documentation.write(
+            export_path,
+            model.__tfi_doc__,
+        )
 
     if export_zip_path:
         import zipfile

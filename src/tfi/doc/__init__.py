@@ -88,18 +88,10 @@ def documentation(model):
         return citation_ids[id]
 
     overview = None
-    model_doc_sections = []
-    if model.__doc__:
-        model_doc = _GoogleDocstring(obj=model).result()
-        model_doc_sections = model_doc['sections']
-
-        # NOTE(adamb) Since we don't want to be parsing rst here, we'll just rewrite
-        #     it to include detected citations. Expect that this rst will be parsed
-        #     for real when rendering HTML.
-        text_sections = [v for t, v in model_doc_sections if t == 'text']
+    if model.__tfi_overview__:
         overview = _detect_paragraph_citations(
             _resolve_citation_id,
-            "\n".join([l for t in text_sections for l in t]))
+            model.__tfi_overview__)
 
     git_authorship_file = None
     if hasattr(model, '__file__'):
@@ -118,7 +110,7 @@ def documentation(model):
 
     def prep_python_method(method_name, method_doc):
         example_args = {}
-        if 'example args' in method_doc:
+        if method_doc.get('example args', None) is not None:
             example_args = _parse_example_args(method_doc['example args'], {'m': model})
         example_result = {}
         try:
@@ -151,6 +143,7 @@ def documentation(model):
 
     return {
         "title": model.__name__ if hasattr(model, '__name__') else type(model).__name__,
+        "title": model.__tfi_name__ if hasattr(model, '__tfi_name__') else type(model).__name__,
         "source": {
             "url": git["url"],
             "label": git["label"],
