@@ -142,7 +142,6 @@ def documentation(model):
         return (name, " ".join(kind), doc)
 
     return {
-        "title": model.__name__ if hasattr(model, '__name__') else type(model).__name__,
         "title": model.__tfi_name__ if hasattr(model, '__tfi_name__') else type(model).__name__,
         "source": {
             "url": git["url"],
