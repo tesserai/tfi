@@ -77,6 +77,7 @@ EXTRAS_REQUIRE = {
         "opentracing<2,>=1.2.2",
         "Flask-Opentracing",
         "jaeger-client",
+        "pillow",
     ],
 }
 ENTRY_POINTS = {

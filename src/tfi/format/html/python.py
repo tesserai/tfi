@@ -1,6 +1,9 @@
 import re
 import base64
 
+from io import BytesIO
+from PIL import Image
+
 from tfi.base import _recursive_transform
 from tfi.format.pretty import pretty
 from tfi.tensor.codec import encode
@@ -15,10 +18,8 @@ def img_png_html(d):
     if False:
         return """<img src="data:image/png;base64,%s">""" % base64.b64encode(d).decode()
 
-    # TODO(adamb) Actually detect image dimensions and host the image itself somewhere, don't
-    #     keep using data URIs
-    width = 768
-    height = 512
+    width, height = Image.open(BytesIO(d)).size
+    # TODO(adamb) Actually host the image itself somewhere, don't keep using data URIs
     datauri = "data:image/png;base64,%s" % base64.b64encode(d).decode()
     small = datauri
     large = datauri
