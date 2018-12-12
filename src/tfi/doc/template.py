@@ -3,7 +3,7 @@ from jinja2 import Template as JinjaTemplate
 from tfi.json import as_jsonable as _as_jsonable
 
 from tfi.format.html.bibtex import citation_bibliography_html
-from tfi.format.html.python import inspect_html
+from tfi.format.html.python import html_repr
 from tfi.format.html.rst import parse_rst as _parse_rst
 
 from tfi.parse.python import parse_example_args as _parse_example_args
@@ -66,10 +66,6 @@ def render(
         jsonable = _as_jsonable(v)
         return json.dumps(jsonable)
 
-    def python_repr(v, max_width=None, max_seq_length=None):
-        s, xform = inspect_html(v, max_width=max_width, max_seq_length=max_seq_length)
-        return xform(s)
-
     def curl_example_for(method_name, example_args):
         def json_default(o):
             if not hasattr(o, '__json__'):
@@ -94,10 +90,6 @@ def render(
 
     def curl_example_for_method(method):
         return curl_example_for(method['name'], method['example args'])
-
-    def html_repr(v):
-        s, xform = inspect_html(v, max_width=None, max_seq_length=None)
-        return xform(s)
 
     citation_id = 0
     citation_label_by_refname = {}
@@ -207,7 +199,7 @@ def render(
                 'label': 'Python (local)',
                 'example_for': lambda method: python_example_for(method, {'COLUMN_LIMIT': 50}),
                 'example_for_class': 'language-python',
-                'repr': python_repr,
+                'repr': html_repr,
                 'repr_class': 'language-python',
                 'getting_started_class': 'language-bash',
                 'getting_started': """pip install tfi

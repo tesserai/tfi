@@ -32,18 +32,13 @@ def img_png_html(d):
 </figure>""" % (large, width, height, small)
 
     
-
 def text_plain(d):
     print("text_plain", d)
     return d
 
-def inspect(o, max_width=None, max_seq_length=None):
+def html_repr(obj, max_width=None, max_seq_length=None):
     # TODO(adamb) Need to do the right thing here...
     replacements = {}
-    def replaceall(s):
-        for k, v in replacements.items():
-            s = s.replace(k, v)
-        return s
 
     prefix_pattern = "alsdkfjaslkdfj%s"
     prefixix = 0
@@ -65,19 +60,19 @@ def inspect(o, max_width=None, max_seq_length=None):
     def xform_or_none(v):
         t = encode(accept_mimetypes, v)
         return v if t is None else t
-    o = _recursive_transform(o, xform_or_none)
+    xformed = _recursive_transform(obj, xform_or_none)
 
     if max_width is None:
         max_width = 79
     if max_seq_length is None:
         max_seq_length = 1000
-    r = pretty(o, max_width=max_width, max_seq_length=max_seq_length)
+    r = pretty(xformed, max_width=max_width, max_seq_length=max_seq_length)
 
     # If there are images in this expression, make them zoomable.
     if image_count:
         r = """<div itemscope itemtype="http://schema.org/ImageGallery">%s</div>""" % r
 
-    xform = replaceall
-    return r, xform
+    for k, v in replacements.items():
+        r = r.replace(k, v)
 
-inspect_html = inspect
+    return r
