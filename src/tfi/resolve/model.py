@@ -226,7 +226,7 @@ def resolve_auto(leading_value):
         return resolve_python_source(leading_value)
     if leading_value.startswith('@'):
         return resolve_exported(leading_value[1:])
-    if leading_value.startswith('/') or leading_value.startswith('./'):
+    if leading_value.startswith('/') or leading_value.startswith('.'):
         return resolve_exported(leading_value)
     if leading_value.startswith('http://') or leading_value.startswith('https://'):
         return resolve_url(leading_value)
