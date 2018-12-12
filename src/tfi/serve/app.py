@@ -6,6 +6,8 @@ import urllib
 from flask import Flask, request, send_file, make_response
 from tfi.doc import documentation, render
 
+from tfi.asset import asset_path as _asset_path
+
 from tfi.serve.endpoint import make_endpoint as _make_endpoint
 
 ERROR_ENCODER = json.JSONEncoder(sort_keys=True, indent=2, separators=(',', ': '))
@@ -69,7 +71,10 @@ def make_app(model, tracer, model_file_fn=None, extra_scripts=""):
 
   @app.route("/object/<path:objectpath>", methods=["GET"])
   def get_object(objectpath):
-    return objectpath
+    asset_path = _asset_path(model, objectpath)
+    if asset_path is None:
+      return make_response({"error": "Not found"}, 404)
+    return send_file(asset_path)
 
   @app.route("/ok", methods=["GET"])
   def ok():

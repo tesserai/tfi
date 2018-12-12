@@ -771,6 +771,7 @@ def as_class(saved_model_path, tag_set=tf.saved_model.tag_constants.SERVING):
                     break
 
     signature_defs = _read_signature_defs(saved_model_dir)
+    asset_paths = tfi.driver.tf.asset.asset_paths_from(saved_model_dir)
     
     facets_overview_statistics_proto = None
     facets_overview_statistics_path = os.path.join(saved_model_dir, 'assets.extra/doc/facets_overview_feature_statistics.pb')
@@ -812,6 +813,7 @@ def as_class(saved_model_path, tag_set=tf.saved_model.tag_constants.SERVING):
 
         '__tfi_signature_defs__': signature_defs,
         '__tfi_facets_overview_proto__': facets_overview_statistics_proto,
+        '__tfi_asset_path__': lambda _, asset_path: asset_paths.get(asset_path, None),
         '__tfi_tempdirs__': tempdirs,
         '__tfi_estimator_modes__': {
             # For now we assume that *all* methods in a SavedModel should be used for estimator inference

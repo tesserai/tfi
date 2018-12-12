@@ -275,7 +275,7 @@ def file(arg, mimetype=None):
         return path(arg, mimetype)
     return stream(arg, mimetype)
 
-def json(s):
+def json(s, assets_extra_root=None):
     """Returns a tensor-adaptable representation of the contents of a JSON-formatted string"""
     def _reify_ref_and_base64(v):
         if not isinstance(v, dict):
@@ -285,6 +285,12 @@ def json(s):
             ref = v['$ref']
             if ref.startswith('http://') or ref.startswith('https://') or ref.startswith('tfi://'):
                 return file(ref, v.get('$mimetype', None))
+            if assets_extra_root is not None and ref.startswith("assets.extra://"):
+                assets_extra_path = ref[len("assets.extra://"):]
+                return file(
+                    os.path.join(assets_extra_root, assets_extra_path),
+                    v.get('$mimetype', None),
+                )
             return v
         if '$base64' in v:
             return base64(v['$base64'], v.get('$mimetype', None))
