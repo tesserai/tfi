@@ -172,6 +172,17 @@ def _png_float_encode(tensor):
             return encoded.eval()
 
 @_register_encoder(
+        ["image/jpeg"],
+        [tf.float32],
+        [(None, None, None), (None, None, 1), (None, None, 2), (None, None, 3)])
+def _jpeg_float_encode(tensor):
+    with _graph_for_tensor(tensor).as_default() as g:
+        with tf.Session(graph=g):
+            # TODO(adamb) Use placeholder and a cached graph, for speed.
+            encoded = tf.image.encode_jpeg(tf.cast(tensor * 255.0, tf.uint8))
+            return encoded.eval()
+
+@_register_encoder(
         ["python/jsonable"],
         [np.float32, np.ndarray],
         [None])
