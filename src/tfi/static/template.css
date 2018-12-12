@@ -291,22 +291,16 @@ header {
   width: 100%;
   z-index: 10000000;
   top: 0;
-
 }
+
 nav.topnav {
   background: linear-gradient(180deg, var(--gray-code-dark) 0%, var(--gray-code-black) 100%);
-  padding: .2em 2em;
+  padding: .75em 2em 0.5em;
   color: var(--gray-text-light);
 }
 
-li.nav-brand {
-  margin-top: 7px;
-}
-
-ul.list-inline {
+nav ul {
   list-style: none;
-  display: inline-block;
-  width: 100%;
   padding: 0;
   margin-top: .5em;
   margin-bottom: .5em;
@@ -314,7 +308,6 @@ ul.list-inline {
 
 .list-inline li {
   display: inline;
-  padding: 0 1em;
   letter-spacing: -.25px;
   font-size: .9rem;
 }
@@ -337,10 +330,6 @@ li.nav-brand {
   display: inline-block;
   float: left;
   margin-top: 3px;
-}
-
-.nav-right {
-  text-align: right;
 }
 
 /* ADD */
@@ -466,13 +455,16 @@ nav select:focus {
 
 /* TOP SECTION */
 
-#head {
+#head, nav ul {
   max-width: var(--content-width);
   margin: auto;
   box-sizing: border-box;
   padding-left: var(--content-gutter);
   padding-right: var(--content-gutter);
   text-align: left;
+}
+
+#head {
   margin-bottom: 2rem;
   margin-top: var(--top-nav);
   padding-top: 5rem;
@@ -657,9 +649,7 @@ nav select:focus {
   overflow: hidden;
 }
 
-.logo-image {
   max-width: 180px;
-  padding-top: 30px;
   padding-bottom: 0px;
 }
 
