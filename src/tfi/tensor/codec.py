@@ -13,12 +13,12 @@ class _BaseAdapter(object):
     def __init__(self, adapter):
         self._adapter = adapter
 
-    def _iterable_as_tensor(self, object, shape, dtype):
+    def _iterable_as_tensor(self, obj, shape, dtype):
         # TODO(adamb) For now assume that elements in iterable can be stacked.
         #     Should actually check that they all have the same shape and dtype.
         #     If they don't, we should be returning a list of them, not a tensor.
 
-        # If object is iterable, assume we'll make a list of tensors with
+        # If obj is iterable, assume we'll make a list of tensors with
         # adjusted target shapes.
         if shape is None:
             expect_len = None
@@ -26,20 +26,20 @@ class _BaseAdapter(object):
             # Perhaps we know enough about the target shape to know expected length.
             expect_len = shape[0]
         else:
-            raise Exception("Shape is %s. Didn't expect iterable: %s" % (shape, object))
+            raise Exception("Shape is %s. Didn't expect iterable: %s" % (shape, obj))
         r = []
         cur_len = 0
         # Adjust target shape for recursive call.
         sub_shape = shape[1:] if shape is not None else None
         candidate_dtype = dtype
         check_dtype = lambda o: isinstance(o, candidate_dtype)
-        for o in object:
+        for o in obj:
             r.append(self.as_tensor(o, sub_shape, dtype))
             cur_len += 1
             if expect_len is not None and cur_len > expect_len:
                 break
         if expect_len is not None and cur_len != expect_len:
-            raise Exception("Expected exactly %s elements (got at least %s) from: %s" % (expect_len, cur_len, object))
+            raise Exception("Expected exactly %s elements (got at least %s) from: %s" % (expect_len, cur_len, obj))
         return self._adapter._stack(r)
 
     def decode_bytes(self, *args):
@@ -51,32 +51,38 @@ class _BaseAdapter(object):
     def decode_file_path(self, *args):
         return self._adapter._decode_file_path(*args)
 
-    def as_tensor(self, object, shape, dtype):
-        tensor = self.maybe_as_tensor(object, shape, dtype)
+    # TODO(adamb) Add (optional) format field. For example can contain enough info to
+    #     know how to encode a dict as a protobuf example.
+    def as_tensor(self, obj, shape, dtype):
+        print("as_tensor", obj, shape, dtype)
+        tensor = self.maybe_as_tensor(obj, shape, dtype)
         if tensor is None:
-            raise Exception("Could not coerce %s %s to tensor %s with shape %s" % (object, type(object), dtype, shape))
+            raise Exception("Could not coerce %s %s to tensor %s with shape %s" % (obj, type(obj), dtype, shape))
         return tensor
 
-    def maybe_as_tensor(self, object, shape, dtype):
-        candidate, candidate_dims, candidate_dtype, reshape_fn = self._adapter._detect_native_kind(object)
+    def maybe_as_tensor(self, obj, shape, dtype):
+        candidate, candidate_dims, candidate_dtype, reshape_fn = self._adapter._detect_native_kind(obj)
+        print("candidate", candidate, "candidate_dims", candidate_dims, "candidate_dtype", candidate_dtype, "reshape_fn", reshape_fn)
 
         if reshape_fn is not None:
             pass
-        elif not isinstance(object, (str, dict)) and isinstance(object, collections.Iterable):
-            candidate = self._iterable_as_tensor(object, shape, dtype)
+        elif not isinstance(obj, (str, dict)) and isinstance(obj, collections.Iterable):
+            candidate = self._iterable_as_tensor(obj, shape, dtype)
             candidate_dims = self._adapter._tensor_dims(candidate)
             candidate_dtype = self._adapter._tensor_dtype(candidate)
             reshape_fn = self._adapter._reshape_tensor
-        elif hasattr(object, '__tensor__'):
-            # Assume that we need to use __tensor__ method if object doesn't have
+        elif hasattr(obj, '__tensor__'):
+            # Assume that we need to use __tensor__ method if obj doesn't have
             # a native dtype.
             try:
-                candidate = object.__tensor__(self, shape, dtype)
+                candidate = obj.__tensor__(self, shape, dtype)
+                if candidate is None:
+                    return None
                 candidate_dims = self._adapter._tensor_dims(candidate)
                 candidate_dtype = self._adapter._tensor_dtype(candidate)
                 reshape_fn = self._adapter._reshape_tensor
             except ShapeMismatchException as sme:
-                candidate = object
+                candidate = obj
                 candidate_dims = sme.longest_matching_suffix
                 candidate_dtype = sme.dtype
                 reshape_fn = lambda o, shp: self._adapter._reshape_tensor(
@@ -91,11 +97,13 @@ class _BaseAdapter(object):
         candidate_ndims = len(candidate_dims)
         if candidate_ndims > len(shape) or shape[-candidate_ndims:] != candidate_dims:
             # Returned shape must be an exact suffix of target shape.
-            raise Exception("Could not coerce %s %s to tensor %s with shape %s. Candidate dimensions are not a compatible suffix: %s" % (object, type(object), dtype, shape, candidate_dims))
+            raise Exception("Could not coerce %s %s to tensor %s with shape %s. Candidate dimensions are not a compatible suffix: %s" % (obj, type(obj), dtype, shape, candidate_dims))
         for dim in shape[:-candidate_ndims]:
             # Check that all remaining dimensions are either None or 1.
             if dim is not None and dim != 1:
-                raise Exception("Could not coerce %s %s to tensor %s with shape %s. There are dimensions in target shape that prevent simple reshaping of compromise shape: %s" % (object, type(object), dtype, shape, candidate_dims))
+                raise Exception("Could not coerce %s %s to tensor %s with shape %s. There are dimensions in target shape that prevent simple reshaping of compromise shape: %s" % (obj, type(obj), dtype, shape, candidate_dims))
+
+        print("reshape_fn(", candidate, shape, ")")
         return reshape_fn(candidate, shape)
 
 def _shape_match_score(src_shape, xfrm_shape):
