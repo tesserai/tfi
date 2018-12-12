@@ -347,39 +347,50 @@
   <body id="documentation" class="">
     <header>
       <nav class="topnav jump-menu" id="top-nav">
-        <div class="nav-right">
-          <ul class="list-inline">
-            <li class="nav-brand">
-              <a target="none" href="https://tesserai.com">Tesserai</a>
-            </li>
-            <li><select>
-              {% for section in body_sections %}
-              {% if section['title'] and section['id'] %}
-              <option label="{{section['title']}}">{{section['id']}}</option>
-              {% endif %}
+        <ul>
+          <li class="nav-brand">
+            <a target="none" href="https://tesserai.com">
+            <svg width="21.5px" height="25px" viewBox="0 0 43 50" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+              <!-- Generator: Sketch 52.2 (67145) - http://www.bohemiancoding.com/sketch -->
+              <title>Tesserai-Logo-Mark</title>
+              <desc>Created with Sketch.</desc>
+              <g id="Tesserai-Logo-Mark" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+                <path d="M42.2461378,0.0446259843 L41.4632876,1.76937516 L37.9352977,9.52351694 C37.5490365,10.3724653 37.1586442,11.2193482 36.7806453,12.0744933 C36.7322514,12.2220622 36.5854836,12.3141178 36.4315643,12.2934435 C24.3727791,12.2934435 12.3139938,12.2934435 0.255208616,12.2934435 C-0.0484298612,12.2934435 -0.050495429,12.2934435 0.0899631861,11.9856738 L4.09923042,3.23179721 C4.54952422,2.25065247 5.01014585,1.27570443 5.4439151,0.288362993 C5.50666754,0.0935478784 5.70260706,-0.0259488656 5.90453674,0.00744576261 C10.9307519,0.00744576261 15.956967,0.00744576261 20.9831822,0.00744576261 L41.8764012,0.00744576261 C42.0008492,-0.00977263577 42.1276098,0.0029742381 42.2461378,0.0446259843"
+                  id="Path" fill="#DEE0DB"></path>
+                <path d="M13.003685,49.8282624 L13.003685,49.452329 C13.003685,39.4962919 13.003685,29.5409433 13.003685,19.5862832 C12.9768926,19.3760045 13.0983809,19.1749499 13.2969957,19.1008747 C17.3262301,17.1055362 21.3520218,15.1046894 25.374371,13.0983345 C25.6842062,12.9434169 25.6862718,12.9434169 25.6862718,13.3048913 C25.6862718,23.4358132 25.6862718,33.5667351 25.6862718,43.6976569 C25.7112118,43.8902919 25.5985821,44.0742825 25.4156824,44.1396885 C21.9386431,45.7274216 18.464358,47.3213515 14.9928269,48.9214781 L13.0057506,49.8303279"
+                  id="Path" fill="#DEE0DB"></path>
+              </g>
+            </svg>
+
+            </a>
+          </li>
+          <li style="float: right;"><select>
+            {% for section in body_sections %}
+            {% if section['title'] and section['id'] %}
+            <option label="{{section['title']}}">{{section['id']}}</option>
+            {% endif %}
+            {% endfor %}
+            <optgroup label="Methods">
+              {% for method in methods %}
+              <option label="{{method['name']}} method">method-{{method['name']}}</option>
               {% endfor %}
-              <optgroup label="Methods">
-                {% for method in methods %}
-                <option label="{{method['name']}} method">method-{{method['name']}}</option>
-                {% endfor %}
-              </optgroup>
-              {% for section in appendix_sections %}
-              {% if section['title'] and section['id'] %}
-              <option label="{{section['title']}}">{{section['id']}}</option>
-              {% endif %}
-              {% endfor %}
-              {% if implementation_notes | length > 0 %}
-              <option label="Implementation Notes">implementation-notes</option>
-              {% endif %}
-              {% if hyperparameters | length > 0 %}
-              <option label="Hyperparameters">hyperparameters</option>
-              {% endif %}
-              {% if references | length > 0 %}
-              <option label="References">references</option>
-              {% endif %}
-            </select></li>
-          </ul>
-        </div>
+            </optgroup>
+            {% for section in appendix_sections %}
+            {% if section['title'] and section['id'] %}
+            <option label="{{section['title']}}">{{section['id']}}</option>
+            {% endif %}
+            {% endfor %}
+            {% if implementation_notes | length > 0 %}
+            <option label="Implementation Notes">implementation-notes</option>
+            {% endif %}
+            {% if hyperparameters | length > 0 %}
+            <option label="Hyperparameters">hyperparameters</option>
+            {% endif %}
+            {% if references | length > 0 %}
+            <option label="References">references</option>
+            {% endif %}
+          </select></li>
+        </ul>
       </nav>
 
     </header>
@@ -580,6 +591,7 @@
             console.log("creating waypoint for", elt)
             new Waypoint({
               element: elt,
+              offset: 200,
               enabled: false,
               handler: function(direction) {
                 var id = this.element.id;
