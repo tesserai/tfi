@@ -173,14 +173,7 @@ def _png_float_encode(tensor):
 
 @_register_encoder(
         ["python/jsonable"],
-        [np.float32],
+        [np.float32, np.ndarray],
         [None])
 def _jsonable_encode_ndarray(tensor):
     return tensor.tolist()
-
-@_register_encoder(
-        ["python/jsonable"],
-        [object],
-        [(None)])
-def _jsonable_encode(tensor):
-    return [o.decode() if isinstance(o, bytes) else o for o in tensor]
