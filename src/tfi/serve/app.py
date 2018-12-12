@@ -3,7 +3,7 @@ import json
 import os.path
 import urllib
 
-from flask import Flask, request, send_file, make_response
+from flask import Flask, request, send_file, make_response, redirect, url_for, Response
 from tfi.doc import documentation, render
 
 from tfi.asset import asset_path as _asset_path
@@ -11,6 +11,10 @@ from tfi.asset import asset_path as _asset_path
 from tfi.serve.endpoint import make_endpoint as _make_endpoint
 
 ERROR_ENCODER = json.JSONEncoder(sort_keys=True, indent=2, separators=(',', ': '))
+
+
+class FixedLocationResponse(Response):
+    autocorrect_location_header = False
 
 def _make_json_error_response(error_obj, status_code):
   error_json = ERROR_ENCODER.encode(error_obj) + "\n"
@@ -46,7 +50,7 @@ def make_app(model, tracer, model_file_fn=None, extra_scripts=""):
           'static'))
 
   app = Flask(__name__,
-      static_url_path="/static",
+      static_url_path="/doc/en/static",
       static_folder=static_folder)
 
   trace_route = tracer(app)
@@ -81,6 +85,10 @@ def make_app(model, tracer, model_file_fn=None, extra_scripts=""):
     return """{"status":"OK"}"""
 
   @app.route("/", methods=["GET"])
+  def root():
+    return redirect('/doc/en/', 302, Response=FixedLocationResponse)
+
+  @app.route("/doc/en/", methods=["GET"])
   def docs():
     doc_dict = documentation(model)
     headers = request.headers
