@@ -95,7 +95,7 @@ class _Source(object):
         return "tfi.data.%s(%s)" % (self.__class__.__name__, ", ".join([repr(arg) for arg in self._repr_args()]))
 
 class base64(_Source):
-    def __init__(encoded=None, mimetype=None):
+    def __init__(self, encoded=None, mimetype=None):
         """Returns a tensor-adaptable representation of the bytes in the given base64 encoded string"""
         self._encoded = encoded
         self._mimetype = mimetype
@@ -125,6 +125,38 @@ class base64(_Source):
 
     def __tensor__(self, ops, shape, dtype):
         return ops.decode_open_file(shape, dtype, self._mimetype, _BytesIO(_base64.b64decode(self._encoded)))
+
+class bytes(_Source):
+    def __init__(self, bytes=None, mimetype=None):
+        """Returns a tensor-adaptable representation of the given bytes"""
+        self._bytes = bytes
+        self._mimetype = mimetype
+ 
+    def __setstate__(self, d):
+        self._bytes = d['$bytes']
+        self._mimetype = d.get('$mimetype', None)
+    
+    def _repr_args(self):
+        return (self._bytes,) if self._mimetype is None else (self._bytes, self._mimetype)
+
+    def __getstate__(self):
+        return self.__json__()
+
+    def __json__(self):
+        r = {}
+        r['$bytes'] = self._bytes
+        if self._mimetype is not None:
+            r['$mimetype'] = self._mimetype
+        return r
+
+    def open(self):
+        return _BytesIO(self._bytes)
+
+    def read(self):
+        return self._bytes
+
+    def __tensor__(self, ops, shape, dtype):
+        return ops.decode_bytes(shape, dtype, self._mimetype, self._bytes)
 
 def idempotent(fn):
     cached = None
@@ -220,10 +252,10 @@ class path(_Source):
         return ops.decode_file_path(shape, dtype, self.read_mimetype(), self._resolve_path())
 
 class stream(_Source):
-    def __init__(self, _arg, _mimetype):
+    def __init__(self, arg, mimetype):
         """Returns a tensor-adaptable representation of the bytes at current position of the given stream"""
-        self._stream = _arg
-        self._mimetype = _mimetype
+        self._stream = arg
+        self._mimetype = mimetype
 
     def read_mimetype(self):
         return self._mimetype
