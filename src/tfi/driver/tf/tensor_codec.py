@@ -1,3 +1,6 @@
+import json
+from google.protobuf.json_format import ParseDict
+
 import tensorflow as tf
 import numpy as np
 
@@ -16,9 +19,11 @@ def _register_decoder(_mimetypes):
         return func
     return _register
 
-def _decode(mimetype, *args):
+def _decode(mimetype, shape, dtype, bytes):
+    if not mimetype:
+        return bytes
     func = _DECODERS[mimetype]
-    return func(*args)
+    return func(shape, dtype, bytes)
 
 import json
 @_register_decoder(["text/json"])
@@ -35,6 +40,7 @@ def _decode_image(shape, dtype, bytes):
     channels = None
     h = None
     w = None
+
     if shape is not None:
         shape_len = len(shape)
         # NOTE(adamb) Technically we can load images, convert them to
@@ -59,12 +65,18 @@ def _decode_image(shape, dtype, bytes):
     image.set_shape([None, None, None])
 
     if dtype is not None and dtype != image.dtype:
+        print("will convert image dtype from", image.dtype, "to", dtype)
         image = tf.image.convert_image_dtype(image, dtype=dtype)
 
     if w is not None or h is not None:
         image = tf.image.resize_images(image, tf.constant([h, w]))
 
     return image
+
+
+def _np_reshape_tensor(o, shp):
+    shp = [dim if dim is not None else -1 for dim in shp]
+    return np.reshape(o, shp)
 
 
 class _driver(object):
@@ -95,6 +107,19 @@ class _driver(object):
     def _tensor_dtype(self, tensor):
         return tensor.dtype
 
+    def _tensor_candidate(self, obj, shape, dtype):
+        if dtype == tf.string and (shape is None or len(shape) == 0):
+            if isinstance(obj, dict) and 'features' in obj:
+                return (
+                    ParseDict(obj, tf.train.Example()).SerializeToString(),
+                    [],
+                    tf.string,
+                    _np_reshape_tensor,
+                )
+                    
+
+        return None, None, None, None
+
     def _reshape_tensor(self, o, shp):
         return tf.reshape(o, shp)
 
@@ -102,12 +127,6 @@ class _driver(object):
         return tf.TensorShape(candidate_dims).is_compatible_with(tf.TensorShape(shape))
 
     def _detect_native_kind(self, obj):
-        def _np_reshape_tensor(o, shp):
-            shp = [dim if dim is not None else -1 for dim in shp]
-            r = np.reshape(o, shp)
-            print("_np_reshape_tensor", r)
-            return r
-
         if isinstance(obj, (str, bytes)):
             return obj, [], tf.string, _np_reshape_tensor
         if isinstance(obj, int):
@@ -134,9 +153,6 @@ from tfi.tensor.codec import _BaseAdapter
 _as_tensor_adapter = _BaseAdapter(_driver())
 as_tensor = _as_tensor_adapter.as_tensor
 
-
-import tensorflow as tf
-import numpy as np
 
 from tfi.data import _Source
 

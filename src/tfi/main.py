@@ -19,10 +19,6 @@ from tfi.cli import resolve as _resolve_model
 from tfi.tensor.codec import encode as _tfi_tensor_codec_encode
 from tfi.format.iterm2 import imgcat as _tfi_format_iterm2_imgcat
 
-from collections import OrderedDict
-from functools import partial
-from itertools import takewhile
-
 def _detect_model_object_kind(model):
     klass = model if isinstance(model, type) else type(model)
     for c in klass.mro():

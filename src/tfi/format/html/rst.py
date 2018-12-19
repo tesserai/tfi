@@ -1275,9 +1275,6 @@ class _HTMLTranslator(nodes.NodeVisitor):
     def depart_rubric(self, node):
         self.body.append('</p>\n')
 
-    def visit_demo_block(self, node):
-        self.body.append(self.settings.demo_block_html(node['demo-method'], node['demo-doc']))
-
     def depart_demo_block(self, node):
         pass
 
@@ -1636,11 +1633,10 @@ class _AddCitationNumbers(Transform):
                 new = nodes.Text(citation_id_str, citation_id_str)
                 citation_ref.replace(old, new)
 
-def parse_rst(source, source_path, initial_header_level, id_prefix, citation_label_by_refname, bibtex_entries_by_refname, demo_block_html):
+def parse_rst(source, source_path, initial_header_level, id_prefix, citation_label_by_refname, bibtex_entries_by_refname):
     settings = _DocutilsSettings(citation_label_by_refname, bibtex_entries_by_refname)
     settings.initial_header_level = initial_header_level
     settings.id_prefix = id_prefix
-    settings.demo_block_html = demo_block_html
     document = new_document(source_path, settings)
     parser = Parser()
     parser.parse(source, document)

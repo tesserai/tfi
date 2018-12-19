@@ -2,97 +2,28 @@ import mimetypes as _mimetypes
 import os.path
 import urllib.request
 
-import json as _json
+import tfi.json as _tfi_json
 import base64 as _base64
 from tfi.base import _recursive_transform
 
 from io import BytesIO as _BytesIO
 
-# class _Source(object):
-#     """
-#     A serializable, "tensorizable" wrapper for a file source. Serialization
-#     reads from the file and embeds the bytes into the state dict.
-#     """
-#     def __init__(self, mimetype=None, repr_fn=None):
-#         self.mimetype = mimetype
-#         self._repr_fn = repr_fn
-
-#     def __repr__(self):
-#         t, d, m = self._repr_fn()
-#         mimetype_repr = ""
-#         if m is not None:
-#             mimetype_repr = ", mimetype=%s" % repr(m)
-#         return "tfi.data.%s(%r%s)" % (t, d, mimetype_repr)
-
-#     def read(self):
-#         t, d, m = self._repr_fn()
-#         if t == 'base64':
-#             return _base64.b64decode(d)
-#         if t == 'url':
-#             with urllib.request.urlopen(d) as f:
-#                 return f.read()
-#         if t == 'path':
-#             with open(d, "rb") as f:
-#                 return f.read()
-#         if t == 'stream':
-#             pos = None
-#             try:
-#                 pos = d.tell()
-#                 return d.read()
-#             finally:
-#                 if pos is not None:
-#                     d.seek(pos)
-
-
-#     def __tensor__(self, ops, shape, dtype):
-#         t, d, m = self._repr_fn()
-#         if t == 'path':
-#             return ops.decode_file_path(shape, dtype, m, d)
-#         if t == 'base64':
-#             return ops.decode_open_file(shape, dtype, m, _BytesIO(_base64.b64decode(d)))
-#         if t == 'url':
-#             with urllib.request.urlopen(d) as f:
-#                 return ops.decode_open_file(shape, dtype, m, f)
-#         return ops.decode_open_file(shape, dtype, m, d)
-
-#     def __setstate__(self, d):
-#         print("d", d.keys())
-#         if 'bytes' in d:
-#             d = {
-#                 'type': 'base64',
-#                 'mimetype': d['mimetype'],
-#                 'data': _base64.b64encode(d['bytes']),
-#             }
-#         print("d", d.keys())
-#         self.mimetype = d['mimetype']
-#         self._repr_fn = lambda: (d['type'], d['data'], d['mimetype'])
-
-#     def __getstate__(self):
-#         t, d, m = self._repr_fn()
-#         return {
-#             'mimetype': m,
-#             'type': t,
-#             'data': d,
-#         }
-
-#     def __json__(self):
-#         t, d, m = self._repr_fn()
-
-#         r = {}
-#         if t == 'url' or t == 'path':
-#             r['$ref'] = d
-#         elif t == 'base64':
-#             r['$base64'] = d
-
-#         if m is not None:
-#             r['$mimetype'] = m
-
-#         print("__json__", r.keys())
-#         return r
-
 class _Source(object):
     def __repr__(self):
         return "tfi.data.%s(%s)" % (self.__class__.__name__, ", ".join([repr(arg) for arg in self._repr_args()]))
+
+class _jsonable_bytes(bytes):
+    def __new__(cls, val, jsonfn=None, fetchablefn=None):
+        r = super().__new__(cls, val)
+        r._jsonfn = jsonfn
+        r._fetchablefn = fetchablefn
+        return r
+
+    def __fetchable__(self):
+        return self._fetchablefn()
+
+    def __json__(self):
+        return self._jsonfn()
 
 class base64(_Source):
     def __init__(self, encoded=None, mimetype=None):
@@ -124,7 +55,8 @@ class base64(_Source):
         return _base64.b64decode(self._encoded)
 
     def __tensor__(self, ops, shape, dtype):
-        return ops.decode_open_file(shape, dtype, self._mimetype, _BytesIO(_base64.b64decode(self._encoded)))
+        return ops.decode_bytes(shape, dtype, self._mimetype, _base64.b64decode(self._encoded))
+        
 
 class bytes(_Source):
     def __init__(self, bytes=None, mimetype=None):
@@ -251,6 +183,26 @@ class path(_Source):
     def __tensor__(self, ops, shape, dtype):
         return ops.decode_file_path(shape, dtype, self.read_mimetype(), self._resolve_path())
 
+class assets_extra(path):
+    def __init__(self, mimetype=None, assets_extra_path=None, assets_extra_root=None):
+        path = os.path.join(assets_extra_root, assets_extra_path)
+        super().__init__(path=path, mimetype=mimetype)
+        self._assets_extra_root = assets_extra_root
+        self._assets_extra_path = assets_extra_path
+
+    def assets_extra_root(self):
+        return self._assets_extra_root
+
+    def assets_extra_path(self):
+        return self._assets_extra_path
+
+    def __fetchable__(self):
+        return {
+            'basename': os.path.basename(self._assets_extra_path),
+            'urlpath': self._assets_extra_path,
+            'mimetype': self._mimetype,
+        }
+
 class stream(_Source):
     def __init__(self, arg, mimetype):
         """Returns a tensor-adaptable representation of the bytes at current position of the given stream"""
@@ -314,21 +266,41 @@ def json(s, assets_extra_root=None):
             return v
 
         if '$ref' in v:
-            ref = v['$ref']
+            v_orig = v
+            ref = v_orig['$ref']
             if ref.startswith('http://') or ref.startswith('https://') or ref.startswith('tfi://'):
-                return file(ref, v.get('$mimetype', None))
-            if assets_extra_root is not None and ref.startswith("assets.extra://"):
+                v = file(ref, mimetype=v.get('$mimetype', None))
+            elif assets_extra_root is not None and ref.startswith("assets.extra://"):
                 assets_extra_path = ref[len("assets.extra://"):]
-                return file(
-                    os.path.join(assets_extra_root, assets_extra_path),
-                    v.get('$mimetype', None),
+                v = assets_extra(
+                    assets_extra_path=assets_extra_path,
+                    assets_extra_root=assets_extra_root,
+                    mimetype=v.get('$mimetype', None),
+                )
+            else:
+                return v_orig
+
+            # # HACK(adamb) Don't keep this!!!
+            # if ref.startswith('.') or ref.startswith('/'):
+            #     v = file(ref, v.get('$mimetype', None))
+
+            if '$encode' in v_orig and v_orig['$encode']:
+                encoding = v_orig['$encode']
+                if encoding != 'base64':
+                    raise Exception("Unknown value for $encode: \"%s\"" % encoding)
+
+                return _jsonable_bytes(
+                    _base64.b64encode(v.read()),
+                    jsonfn=lambda: v_orig,
+                    fetchablefn=v.__fetchable__,
                 )
             return v
-        if '$base64' in v:
+        elif '$base64' in v:
             return base64(v['$base64'], v.get('$mimetype', None))
+
         return v
 
-    v = _json.loads(s)
+    v = _tfi_json.loads(s)
     # Support:
     # - referencing HTTP and HTTPS URLs with {"$ref":"https://..."}
     # - byte arrays with {"$base64": "Q423z..."}

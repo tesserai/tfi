@@ -149,7 +149,7 @@ pre.line-numbers > code {
 	top: 0;
 	font-size: 100%;
 	left: -3.8em;
-	width: 3em; /* works for line-numbers below 1000 lines */
+	width: 3.8em; /* works for line-numbers below 1000 lines */
 	letter-spacing: -1px;
 
 	-webkit-user-select: none;
@@ -160,7 +160,7 @@ pre.line-numbers > code {
 }
 
 .line-numbers-rows {
-    margin-top: -0.1em;
+    /* margin-top: -0.1em; */
 }
 .line-numbers-rows > span {
 	pointer-events: none;
@@ -173,7 +173,7 @@ pre.line-numbers > code {
 }
 
 .language-curl .line-numbers-rows>span:before {
-    content: '>';
+    content: '…';
 }
 
 .line-numbers-rows > span:before {

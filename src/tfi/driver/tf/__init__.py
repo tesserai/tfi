@@ -193,31 +193,6 @@ def _resolve_instance_method_tensors(lazy_instance, method):
             return default
         return _GetAttrAccumulator.apply(annotation, lazy_instance)
 
-    def _tensor_info_str(tensor):
-        if tensor.shape.ndims is None:
-            return '%s ?' % tensor.dtype.name
-
-        return '%s <%s>' % (
-            tensor.dtype.name,
-            ', '.join(['?' if n is None else str(n) for n in tensor.shape.as_list()]),
-        )
-
-    def _enrich_docs_with_tensor_info(doc_fields, tensor_dict):
-        existing = {k: v for k, _, v in doc_fields}
-        return [
-            (name, _tensor_info_str(tensor), existing.get(name, ''))
-            for name, tensor in tensor_dict.items()
-        ]
-
-    def _enriched_method_doc(input_tensors, output_tensors):
-        if method.__doc__:
-            doc = GoogleDocstring(obj=method).result()
-        else:
-            doc = {'sections': [], 'args': {}, 'returns': {}}
-        doc['args'] = _enrich_docs_with_tensor_info(doc['args'], input_tensors)
-        doc['returns'] = _enrich_docs_with_tensor_info(doc['returns'], output_tensors)
-        return doc
-
     sig = inspect.signature(method)
 
     input_annotations = OrderedDict([
@@ -266,7 +241,6 @@ def _resolve_instance_method_tensors(lazy_instance, method):
         raise Exception("No output tensors for %s" % method)
 
     return _RenderedInstanceMethod(
-            doc=_enriched_method_doc(input_tensors, output_tensors),
             input_tensors=input_tensors,
             output_tensors=output_tensors,
             output_tensor_shapes=output_tensor_shapes,
@@ -391,7 +365,6 @@ def _make_method(instance, signature_def, tensor_shapes, tensor_shape_labels, va
 
 def _infer_signature_defs(class_dict, instance):
     signature_defs = OrderedDict()
-    signature_defs_docs = OrderedDict()
     estimator_modes = OrderedDict()
 
     fields = instance.__dict__
@@ -422,11 +395,10 @@ def _infer_signature_defs(class_dict, instance):
 
     for method_name in raw_methods.keys():
         resolved_method = _resolve_attr(method_name)
-        signature_defs_docs[method_name] = resolved_method.doc
         signature_defs[method_name] = resolved_method.build_signature_def()
         estimator_modes[method_name] = resolved_method.estimator_mode
 
-    return signature_defs, signature_defs_docs, estimator_modes
+    return signature_defs, estimator_modes
 
 class Meta(type):
     @staticmethod
@@ -470,21 +442,6 @@ class Meta(type):
                         for hparam_name, hparam_val in hparam_items
                     ]
 
-
-                if hasattr(self, '__doc__') and self.__doc__:
-                    model_doc = GoogleDocstring(obj=self).result()
-                    model_doc_sections = model_doc['sections']
-                    if not hasattr(self, '__tfi_name__'):
-                        self.__tfi_name__ = type(self).__name__
-
-                    if not hasattr(self, '__tfi_overview__'):
-                        # NOTE(adamb) Since we don't want to be parsing rst here, we'll just rewrite
-                        #     it to include detected citations. Expect that this rst will be parsed
-                        #     for real when rendering HTML.
-                        text_sections = [v for t, v in model_doc_sections if t == 'text']
-                        overview = "\n".join([l for t in text_sections for l in t])
-                        self.__tfi_overview__ = overview
-
                 self.__tfi_graph__ = graph
                 self.__tfi_session__ = None
 
@@ -498,7 +455,7 @@ class Meta(type):
 
                     # Once init has executed, we can bind proper methods too!
                     if not hasattr(self, '__tfi_signature_defs__'):
-                        self.__tfi_signature_defs__, self.__tfi_signature_defs_docs__, self.__tfi_estimator_modes__ = _infer_signature_defs(d, self)
+                        self.__tfi_signature_defs__, self.__tfi_estimator_modes__ = _infer_signature_defs(d, self)
 
                     if not hasattr(self, '__tfi_vars_initialized__'):
                         self.__tfi_vars_initialized__ = set()
@@ -528,30 +485,7 @@ class Meta(type):
                             setattr(self, method_name, method)
 
                 if not hasattr(self, '__tfi_doc__'):
-                    sdd = self.__tfi_signature_defs_docs__
-                    self.__tfi_doc__ = tfi.driver.tf.documentation.ModelDocumentation(
-                        hyperparameters=self.__tfi_hyperparameters__,
-                        name=self.__tfi_name__,
-                        overview=self.__tfi_overview__,
-                        methods=OrderedDict([
-                            (
-                                method_name,
-                                tfi.driver.tf.documentation.MethodDocumentation(
-                                    name=method_name,
-                                    overview=sdd[method_name]['sections'],
-                                    inputs=sdd[method_name]['args'],
-                                    outputs=sdd[method_name]['returns'],
-                                    example=tfi.driver.tf.documentation.MethodExample(
-                                        inputs={
-                                            input_name: eval("\n".join(input_val_lines), {}, {'m': self, 'tfi': tfi})
-                                            for input_name, _, input_val_lines in sdd[method_name]['example args']
-                                        }
-                                    ),
-                                ),
-                            )
-                            for method_name, signature_def in self.__tfi_signature_defs__.items()
-                        ]),
-                    )
+                    self.__tfi_doc__ = lambda _: tfi.driver.tf.documentation.ModelDocumentation.detect(self)
 
                 for fn in self.__tfi_refresh_watchers__:
                     fn(self)
@@ -789,28 +723,9 @@ def as_class(saved_model_path, tag_set=tf.saved_model.tag_constants.SERVING):
                 loader.load(s.__tfi_get_session__(), tag_set.split(','), saved_model_dir),
         '__name__': doc.name(),
         '__doc__': doc.docstring(),
-        '__tfi_doc__': doc,
+        '__tfi_doc__': lambda _: doc,
 
-        '__tfi_name__': doc.name(),
-        '__tfi_overview__': doc.overview(),
         '__tfi_hyperparameters__': doc.hyperparameters(),
-        '__tfi_signature_defs_docs__': {
-            method_name: {
-                'name': method_name,
-                'sections': method_doc.overview(),
-                'args': method_doc.inputs(),
-                'returns': method_doc.outputs(),
-                'example args': [
-                    (
-                        input_name,
-                        None,
-                        [input_repr],
-                    )
-                    for input_name, input_repr in method_doc.example().input_reprs().items()
-                ],
-            }
-            for method_name, method_doc in doc.methods().items()
-        },
 
         '__tfi_signature_defs__': signature_defs,
         '__tfi_facets_overview_proto__': facets_overview_statistics_proto,

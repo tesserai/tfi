@@ -32,6 +32,13 @@ body {
   --top-nav: 53px;
 }
 
+:target::before {
+  content: "";
+  display: block;
+  height: 60px; /* fixed header height*/
+  margin: -60px 0 0; /* negative fixed header height */
+}
+
 .source-code-ref a {
   color: #43b290;
   font-size: 0.875rem;
@@ -136,7 +143,7 @@ section .method-copy img {
 }
 
 section h4 {
-  font-size: 1rem;
+  font-size: 1.25rem;
   color: #2da0e5;
   border: none;
 
@@ -176,14 +183,6 @@ section h4 {
   padding-bottom: 0.8rem;
 }
 
-.method-list.inputs h4::before {
-  content: "arguments";
-}
-
-.method-list.outputs h4::before {
-  content: "output";
-}
-
 .method-list-item-label {
   margin: 0;
   position: relative;
@@ -210,9 +209,9 @@ section h4 {
 }
 
 .tabs-code {
-  text-align: right;
+  text-align: left;
   margin-bottom: 0.5rem;
-  margin-top: 0.5rem;
+  margin-top: 1.5rem;
 }
 
 .tabs-code>nav {
@@ -230,6 +229,10 @@ section h4 {
 }
 .tabs-code>nav a:last-of-type {
   padding-right: 0;
+}
+
+.tabs-code>nav a:first-of-type {
+  padding-left: 0;
 }
 
 .tabs-code>nav a:active {
@@ -270,8 +273,12 @@ section h4 {
   line-height: 1.5;
   font-family: "Source Code Pro",Menlo,monospace;
   margin: 0;
-  padding: 1.25rem 4rem;
+  padding: 1.25rem 3rem;
   font-size: 0.875rem;
+}
+
+.method-example code {
+  display: block;
 }
 
 .method-example code, #formattedJson, .method-example .line-numbers-rows {

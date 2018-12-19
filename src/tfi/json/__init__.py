@@ -71,15 +71,33 @@ except ImportError:
 
 
 def _json_default(o):
-    if not hasattr(o, '__json__'):
-        raise TypeError("Unserializable object {} of type {}".format(o, type(o)))
+  if hasattr(o, '__json__'):
     return o.__json__()
 
-def dump(obj, f):
-    return json.dump(obj, f, default=_json_default)
+  if isinstance(o, bytes):
+    # HACK(adamb) Use a heuristic to distinguish between bytes safely representable as
+    #     a string and bytes that are not.
+    try:
+      # If this is pure ASCII, we're done!
+      return o.decode('ascii')
+    except UnicodeDecodeError:
+      # Otherwise fallback to base64-encoding the string.
+      return {
+        '$base64': base64.b64encode(o).decode('utf-8'),
+      }
 
-def dumps(obj):
-    return json.dumps(obj, default=_json_default)
+  raise TypeError("Unserializable object {} of type {}".format(o, type(o)))
+
+
+def dump(obj, f, coerce=False):
+  if coerce:
+    obj = as_jsonable(obj)
+  return json.dump(obj, f, default=_json_default)
+
+def dumps(obj, coerce=False):
+  if coerce:
+    obj = as_jsonable(obj)
+  return json.dumps(obj, default=_json_default)
 
 def load(f):
   return json.load(f)

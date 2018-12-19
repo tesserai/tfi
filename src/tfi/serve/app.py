@@ -4,7 +4,7 @@ import os.path
 import urllib
 
 from flask import Flask, request, send_file, make_response, redirect, url_for, Response
-from tfi.doc import documentation, render
+from tfi.doc.template import HtmlRenderer
 
 from tfi.asset import asset_path as _asset_path
 
@@ -96,9 +96,10 @@ data: {"status":"done"}
 
   @app.route("/object/<path:objectpath>", methods=["GET"])
   def get_object(objectpath):
-    asset_path = _asset_path(model, objectpath)
+    asset_path = _asset_path(model, "object/%s" % objectpath)
     if asset_path is None:
-      return make_response({"error": "Not found"}, 404)
+      return make_response(json.dumps({"error": "Not found", "path": objectpath}), 404)
+    
     return send_file(asset_path)
 
   @app.route("/ok", methods=["GET"])
@@ -109,17 +110,18 @@ data: {"status":"done"}
   def root():
     return redirect('/doc/en/', 302, Response=FixedLocationResponse)
 
+  doc_renderer = HtmlRenderer(
+    documentation=model.__tfi_doc__().with_updated_example_outputs(model),
+    include_snapshot=model_file_fn is not None,
+    extra_scripts=extra_scripts,
+  )
   @app.route("/doc/en/", methods=["GET"])
   def docs():
-    doc_dict = documentation(model)
     headers = request.headers
-    return render(**doc_dict,
-        include_snapshot=model_file_fn is not None,
+    return doc_renderer.render(
         proto=headers.get('X-Forwarded-Proto', 'http'),
         host=headers.get('X-Forwarded-Host', headers['HOST']),
-        extra_scripts=extra_scripts)
-
-    return response
+      )
 
   @app.errorhandler(400)
   @app.errorhandler(500)

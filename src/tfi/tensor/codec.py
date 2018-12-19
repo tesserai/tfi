@@ -54,7 +54,6 @@ class _BaseAdapter(object):
     # TODO(adamb) Add (optional) format field. For example can contain enough info to
     #     know how to encode a dict as a protobuf example.
     def as_tensor(self, obj, shape, dtype):
-        print("as_tensor", obj, shape, dtype)
         tensor = self.maybe_as_tensor(obj, shape, dtype)
         if tensor is None:
             raise Exception("Could not coerce %s %s to tensor %s with shape %s" % (obj, type(obj), dtype, shape))
@@ -62,25 +61,35 @@ class _BaseAdapter(object):
 
     def maybe_as_tensor(self, obj, shape, dtype):
         candidate, candidate_dims, candidate_dtype, reshape_fn = self._adapter._detect_native_kind(obj)
-        print("candidate", candidate, "candidate_dims", candidate_dims, "candidate_dtype", candidate_dtype, "reshape_fn", reshape_fn)
 
         if reshape_fn is not None:
             pass
-        elif not isinstance(obj, (str, dict)) and isinstance(obj, collections.Iterable):
+        elif not isinstance(obj, (str, bytes, dict)) and isinstance(obj, collections.Iterable):
             candidate = self._iterable_as_tensor(obj, shape, dtype)
             candidate_dims = self._adapter._tensor_dims(candidate)
             candidate_dtype = self._adapter._tensor_dtype(candidate)
             reshape_fn = self._adapter._reshape_tensor
-        elif hasattr(obj, '__tensor__'):
+        else:
             # Assume that we need to use __tensor__ method if obj doesn't have
             # a native dtype.
             try:
-                candidate = obj.__tensor__(self, shape, dtype)
-                if candidate is None:
-                    return None
-                candidate_dims = self._adapter._tensor_dims(candidate)
-                candidate_dtype = self._adapter._tensor_dtype(candidate)
-                reshape_fn = self._adapter._reshape_tensor
+                if hasattr(obj, '__tensor__'):
+                    candidate_orig = obj.__tensor__(self, shape, dtype)
+                    if candidate_orig is None:
+                        return None
+
+                    candidate, candidate_dims, candidate_dtype, reshape_fn = self._adapter._detect_native_kind(candidate_orig)
+
+                    if reshape_fn is None:
+                        candidate = candidate_orig
+                        candidate_dims = self._adapter._tensor_dims(candidate)
+                        candidate_dtype = self._adapter._tensor_dtype(candidate)
+                        reshape_fn = self._adapter._reshape_tensor
+                else:
+                    candidate, candidate_dims, candidate_dtype, reshape_fn = self._adapter._tensor_candidate(obj, shape, dtype)
+                    if reshape_fn is None:
+                        return None
+
             except ShapeMismatchException as sme:
                 candidate = obj
                 candidate_dims = sme.longest_matching_suffix
@@ -88,8 +97,6 @@ class _BaseAdapter(object):
                 reshape_fn = lambda o, shp: self._adapter._reshape_tensor(
                         o.__tensor__(self, candidate_dims, dtype),
                         [-1 if d is None else d for d in shp])
-        else:
-            return None
 
         if self._adapter._are_shapes_compatible(candidate_dims, shape):
             return candidate
@@ -103,7 +110,6 @@ class _BaseAdapter(object):
             if dim is not None and dim != 1:
                 raise Exception("Could not coerce %s %s to tensor %s with shape %s. There are dimensions in target shape that prevent simple reshaping of compromise shape: %s" % (obj, type(obj), dtype, shape, candidate_dims))
 
-        print("reshape_fn(", candidate, shape, ")")
         return reshape_fn(candidate, shape)
 
 def _shape_match_score(src_shape, xfrm_shape):
