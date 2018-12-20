@@ -297,13 +297,16 @@
   </div>
 {%- endmacro %}
 
-{% macro language_tabs() -%}
+{% macro language_tabs(include_selector=False, select_attrs=None) -%}
   <div class="tabs tabs-code">
-    <nav class="nav-languages">
+    <nav class="nav-languages" style="display: inline-block">
       {% for lang in languages %}
       <a data-language="{{lang.name}}"{% if loop.first %} class="selected"{% endif %}>{{lang.label}}</a>
       {% endfor %}
     </nav>
+    {% if include_selector %}
+    <select {% for select_attr, select_attr_value in select_attrs.items() %} {{select_attr}}="{{select_attr_value}}"{% endfor %} style="float: right; display: none"></select>
+    {% endif %}
   </div>
 {%- endmacro %}
 
@@ -321,7 +324,7 @@
     <meta charset="utf-8">
     <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no" name="viewport">
     {{extra_scripts}}
-    <link rel="stylesheet" href="/design/fonts/whitney.css">
+    <!-- <link rel="stylesheet" href="/design/fonts/whitney.css"> -->
     <meta property="og:title" content="{{title}}" />
     <meta property="og:description" content="{{description}}" />
     {% if include_snapshot %}<meta name="tesserai:snapshot" content="{{proto}}://{{host}}/meta/snapshot"/>{% endif %}
@@ -454,17 +457,19 @@
       {% endif %}
       <div class="method-example">
         <h4>example code</h4>
-        {{language_tabs()}}
+        {{language_tabs(True, {"class": "method-example-selector", "data-method": method.name()})}}
         {% for lang in languages %}
-        <div class="method-example-code" data-language="{{lang.name}}" {% if not loop.first %} style="display: none;"
-          {% endif %}>
-          <pre>{% for line in lang.example_for(proto, host, method) %}<code class="{{lang.example_for_class}} line-numbers">{{line|e}}</code>{% endfor %}</pre>
+        {% set langloop = loop %}
+        {% for example in lang.example_for(proto, host, method).examples %}
+        <div class="method-example-code" data-method="{{method.name()}}" data-language="{{lang.name}}" data-example-name="{{example.name}}" data-example-label="{{example.label}}" {% if not langloop.first or not loop.first %}style="display: none;"{% endif %}>
+          <pre>{% for line in example.lines %}<code class="{{lang.example_for_class}} line-numbers">{{line|e}}</code>{% endfor %}</pre>
         </div>
+        {% endfor %}
         {% endfor %}
       </div>
       <div class="method-example">
         {% for lang in languages %}
-        <div class="method-example-code" data-language="{{lang.name}}"{% if not loop.first %} style="display: none;"{% endif %}>
+        <div class="method-example-code" data-method="{{method.name()}}" data-language="{{lang.name}}"{% if not loop.first %} style="display: none;"{% endif %}>
           <pre><code class="{{lang.repr_class}}">{{lang.repr(method.example().outputs(), max_width=50, max_seq_length=7)|e}}</code></pre>
         </div>
         {% endfor %}
@@ -644,23 +649,111 @@
       var selectedClass = "selected";
       var selectedLanguageChoiceSel = languageChoiceSel + "." + selectedClass;
       var languageChoices = document.querySelectorAll(languageChoiceSel);
+      var exampleChoiceSel = "select.method-example-selector";
+      var exampleChoices = document.querySelectorAll(exampleChoiceSel);
 
-      var chooseThisLanguage = function() {
-        var lang = this.dataset["language"];
-
+      var chooseLanguage = function(lang, selectedExampleByMethod, exampleOptionsByMethod) {
         codeExamples.forEach(function (elt) {
-          elt.style.display = elt.dataset["language"] === lang ? 'block' : 'none';
+          var show = false;
+          var method = elt.dataset["method"];
+          if (elt.dataset["language"] === lang) {
+            if (!elt.dataset["exampleName"]) {
+              show = true;
+            } else if (!elt.dataset["exampleName"] || elt.dataset["exampleName"] === selectedExampleByMethod[method]) {
+              show = true
+            }
+          }
+
+          elt.style.display = show ? 'block' : 'none';
         });
 
-        languageChoices.forEach(function(e) {
+        var selectedLanguageChoice;
+        languageChoices.forEach(function (e) {
           if (e.dataset["language"] === lang) {
+            selectedLanguageChoice = e;
             e.classList.add(selectedClass);
           } else {
             e.classList.remove(selectedClass);
           }
         });
+
+        exampleChoices.forEach(function (e) {
+          var method = e.dataset["method"];
+          var options = exampleOptionsByMethod[method];
+          var selectedOption = selectedExampleByMethod[method];
+          if (!options || options.length <= 1) {
+            e.options.length = 0;
+            e.style.display = 'none';
+          } else {
+            if (e.options.length !== options.length) {
+              e.options.length = options.length;
+            }
+            options.forEach(function(option, ix) {
+              if (e.options[ix] !== options) {
+                e.options[ix] = option;
+              }
+              if (option.value === selectedOption) {
+                e.selectedIndex = ix;
+              }
+            });
+
+            e.style.display = 'block';
+          }
+        });
+      }
+
+      var examplesByLangByMethod = {};
+      var exampleOptionsByLangByMethod = {};
+      codeExamples.forEach(function (elt) {
+        var lang = elt.dataset["language"];
+        if (!examplesByLangByMethod[lang]) {
+          examplesByLangByMethod[lang] = {};
+        }
+        if (!exampleOptionsByLangByMethod[lang]) {
+          exampleOptionsByLangByMethod[lang] = {};
+        }
+        
+        var selectedExampleByMethod = examplesByLangByMethod[lang];
+        var exampleOptionsByMethod = exampleOptionsByLangByMethod[lang];
+
+        if (!elt.dataset["exampleName"] || !elt.dataset["method"]) {
+          return;
+        }
+        var method = elt.dataset["method"];
+        var example = elt.dataset["exampleName"];
+        var exampleLabel = elt.dataset["exampleLabel"];
+        if (!exampleOptionsByMethod[method]) {
+          exampleOptionsByMethod[method] = [];
+        }
+        exampleOptionsByMethod[method].push(new Option(exampleLabel, example));
+        if (!selectedExampleByMethod[method]) {
+          selectedExampleByMethod[method] = example;
+        }
+      });
+
+      var chosenLanguage;
+      var chooseThisLanguage = function() {
+        var lang = this.dataset["language"];
+        chooseLanguage(
+            lang,
+            examplesByLangByMethod[lang],
+            exampleOptionsByLangByMethod[lang]);
+        chosenLanguage = lang;
       };
 
+      var chooseThisExample = function() {
+        var method = this.dataset["method"];
+        var selectedOption = this.options[this.selectedIndex].value;
+        examplesByLangByMethod[chosenLanguage][method] = selectedOption;
+        chooseLanguage(
+            chosenLanguage,
+            examplesByLangByMethod[chosenLanguage],
+            exampleOptionsByLangByMethod[chosenLanguage]);
+      }
+
+      exampleChoices.forEach(function(e) {
+        e.addEventListener("change", chooseThisExample);
+      });
 
       var firstSelected;
       languageChoices.forEach(function(e) {

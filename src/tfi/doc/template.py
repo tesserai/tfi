@@ -60,7 +60,7 @@ class HtmlRenderer(object):
             for method in methods
         }
 
-        language_names = ['json', 'multipart-form']
+        language_names = ['json']
         # if include_snapshot:
         #     language_names.append('python')
 
