@@ -462,7 +462,7 @@
         {% set langloop = loop %}
         {% for example in lang.example_for(proto, host, method).examples %}
         <div class="method-example-code" data-method="{{method.name()}}" data-language="{{lang.name}}" data-example-name="{{example.name}}" data-example-label="{{example.label}}" {% if not langloop.first or not loop.first %}style="display: none;"{% endif %}>
-          <pre>{% for line in example.lines %}<code class="{{lang.example_for_class}} line-numbers">{{line|e}}</code>{% endfor %}</pre>
+          <pre>{% for line in example.lines %}<code class="{{lang.example_for_class}} line-numbers">{% if line %}{{line|e}}{% else %} {% endif %}</code>{% endfor %}</pre>
         </div>
         {% endfor %}
         {% endfor %}
