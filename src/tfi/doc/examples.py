@@ -91,13 +91,13 @@ class JsonExemplar(object):
             prefetch_replacement = None
             ref_replacement = None
             if j.get('$encode', None) == 'base64':
-                prefetch_replacement = '"$(cat ./%s | base64)"' % f['basename']
+                prefetch_replacement = '"$(base64 < ./%s)"' % f['basename']
             else:
                 ref_replacement = '{"$ref": "%s"}' % f['url']
                 if f['mimetype']:
-                    prefetch_replacement = '{"\\$mimetype": "%s", "\\$base64": "$(cat ./%s | base64)"}' % (f['mimetype'], f['basename'])
+                    prefetch_replacement = '{"\\$mimetype": "%s", "\\$base64": "$(base64 < ./%s)"}' % (f['mimetype'], f['basename'])
                 else:
-                    prefetch_replacement = '{"\\$base64": "$(cat ./%s | base64)"}' % (f['basename'])
+                    prefetch_replacement = '{"\\$base64": "$(base64 < ./%s)"}' % (f['basename'])
 
             if prefetch_replacement:
                 prefetch_commands.append('curl -sO %s' % f['url'])
