@@ -24,7 +24,7 @@ from tfi.driver.tf.tensor_codec import as_tensor
 import tfi.tensor.frame
 import tfi.driver.tf.checkpoint
 import tfi.driver.tf.asset
-import tfi.driver.tf.documentation
+import tfi.driver.tf.doc
 
 def _walk(out_tensors, in_tensors, fn):
     to_visit = set(out_tensors)
@@ -485,7 +485,7 @@ class Meta(type):
                             setattr(self, method_name, method)
 
                 if not hasattr(self, '__tfi_doc__'):
-                    self.__tfi_doc__ = lambda _: tfi.driver.tf.documentation.ModelDocumentation.detect(self)
+                    self.__tfi_doc__ = lambda _: tfi.driver.tf.doc.detect_model_documentation(self)
 
                 for fn in self.__tfi_refresh_watchers__:
                     fn(self)
@@ -717,7 +717,7 @@ def as_class(saved_model_path, tag_set=tf.saved_model.tag_constants.SERVING):
 
     classname = os.path.basename(saved_model_path)
 
-    doc = tfi.driver.tf.documentation.read(saved_model_dir, signature_defs)
+    doc = tfi.driver.tf.doc.read(saved_model_dir, signature_defs)
     return type(classname, (Model,), {
         '__init__': lambda s:
                 loader.load(s.__tfi_get_session__(), tag_set.split(','), saved_model_dir),
@@ -786,7 +786,7 @@ def dump(export_path, model):
               signature_def_map=model.__tfi_signature_defs__)
         builder.save()
 
-        tfi.driver.tf.documentation.write(
+        tfi.driver.tf.doc.write(
             export_path,
             model.__tfi_doc__,
         )

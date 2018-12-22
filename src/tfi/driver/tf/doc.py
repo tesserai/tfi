@@ -1,262 +1,45 @@
 import tfi.json
 import tensorflow as tf
 import os.path
-import numpy as np
 
 import tfi.data
-
-from collections import OrderedDict
+import tfi.doc
 
 from google.protobuf.json_format import ParseDict
-
-from tfi.parse.arxiv import discover_arxiv_ids as _discover_arxiv_ids
-from tfi.parse.doi import discover_dois as _discover_dois
-
-
-
-class ModelSource(object):
-    @classmethod
-    def detect(cls, model):
-        git_authorship_file = None
-        if hasattr(model, '__file__'):
-            git_authorship_file = model.__file__
-        elif hasattr(model, '__tfi_file__'):
-            git_authorship_file = model.__tfi_file__
-        elif hasattr(model, '__tfi_module__'):
-            git_authorship_file = model.__tfi_module__.__file__
-
-        if not git_authorship_file:
-            return None
-        github_user_repo = _GitUserRepo("github-users.json")
-        git = _git_authorship(github_user_repo, git_authorship_file)
-        return cls(
-            url=git['url'],
-            label=git['label'],
-            commit=git['commit'][:7],
-            authors=git['authors'],
-        )
-
-    def __init__(self, *, url, label, commit, authors):
-        self._url = url
-        self._label = label
-        self._commit = commit
-        self._authors = authors
-
-    def url(self): self._url
-
-    def label(self): self._label
-
-    def commit(self): self._commit
-
-    def authors(self): self._authors
-
-
-from tfi.parse.biblib import bib as _bib
-from collections import OrderedDict as _OrderedDict
-
-from tfi.resolve.git import git_authorship as _git_authorship
-from tfi.resolve.git import GitUserRepo as _GitUserRepo
-
-class CitationResolver(object):
-    def __init__(self, bibtex_resolve):
-        self._bibtex_resolve = bibtex_resolve
-        self._bibtex_parser = _bib.Parser()
-        self._bibtex_parse = self._bibtex_parser.parse
-        self._citation_ids = {}
-
-    def references(self):
-        return _OrderedDict([
-            (k, _OrderedDict(v))
-            for k, v in reversed(self._bibtex_parser.get_entries().items())
-        ])
-
-    def resolve_citation_id(self, id_type, id):
-        if id not in self._citation_ids:
-            bibtex = self._bibtex_resolve(**{id_type: [id]})[0]
-            self._bibtex_parse(bibtex, log_fp=sys.stderr)
-            if bibtex.startswith("@article{"):
-                self._citation_ids[id] = bibtex.split(",", 1)[0][len("@article{"):]
-            else:
-                return id
-
-        return self._citation_ids[id]
-
-class Bibliographer(object):
-    def __init__(self):
-        from tfi.resolve.arxiv2bib import arxiv2bib as _arxiv2bib
-        from tfi.resolve.doi2bib import doi2bib as _doi2bib
-        from tfi.resolve.bibtex import BibtexRepo as _BibtexRepo
-
-        bibtex_repo = _BibtexRepo("bibtex.json", {"arxiv_id": _arxiv2bib, "doi": _doi2bib})
-        self._citation_resolver = CitationResolver(bibtex_resolve=bibtex_repo.resolve)
-        self._resolve_citation_id = self._citation_resolver.resolve_citation_id
-
-    def references(self):
-        return self._citation_resolver.references()
-
-    def rewrite(self, paragraph):
-        # Should return index ranges with ids, along with ids
-        # themselves. Then we can replace them directly in paragraph with
-        # references to their ids and accumulate an id citation.
-        matches = [
-            *[
-                (span, 'arxiv_id', id)
-                for (span, id) in _discover_arxiv_ids(paragraph)
-            ],
-            *[
-                (span, 'doi', id)
-                for (span, id) in _discover_dois(paragraph)
-            ],
-        ]
-
-        # Replace span in reverse with archive_id
-        matches.sort(reverse=True)
-
-        new_paragraph_parts = []
-        prev_start = len(paragraph)
-
-        # Rewrite paragraph in reverse, so span indexes are correct.
-        # Replace URLs to papers with proper references to papers.
-        # Accumulate paragraph pieces and then join them at the very
-        # end to avoid wasting string allocations.
-        for (start, end), id_type, id in matches:
-            try:
-                citation_id = None
-                citation_id = self._resolve_citation_id(id_type, id)
-            except Exception as ex:
-                print(ex)
-                import traceback
-                traceback.print_exc()
-            suffix = paragraph[end:prev_start]
-            new_paragraph_parts.append(suffix)
-            if citation_id:
-                new_paragraph_parts.append("]_")
-                new_paragraph_parts.append(citation_id)
-                new_paragraph_parts.append(" [")
-            prev_start = start
-        if prev_start != 0:
-            new_paragraph_parts.append(paragraph[0:prev_start])
-
-        new_paragraph_parts.reverse()
-        return "".join(new_paragraph_parts)
-
 from tfi.parse.docstring import GoogleDocstring
 
-class MethodExample(object):
-    @classmethod
-    def generate(cls, *, method, inputs):
-        return cls(
-            inputs=inputs,
-            outputs=method(**inputs)
-        )
+def _detect_method_documentation(*, bibliographer, model, method_name, method, signature_def):
+    # NOTE(adamb) Since we don't want to be parsing rst here, we'll just rewrite
+    #     it to include detected citations. Expect that this rst will be parsed
+    #     for real when rendering HTML.
+    docstr = GoogleDocstring(obj=method).result()
+    docstr_sections = docstr['sections']
+    text_sections = [v for k, v in docstr_sections if k == 'text']
+    overview = "\n".join([l for t in text_sections for l in t])
 
-    def __init__(self, *, inputs, outputs=None):
-        self._inputs = inputs
-        self._outputs = outputs
+    docstr['args'] = _enrich_docs_with_tensor_info(docstr['args'], signature_def.inputs)
+    docstr['returns'] = _enrich_docs_with_tensor_info(docstr['returns'], signature_def.outputs)
 
-    def inputs(self): return self._inputs
-
-    def input_reprs(self):
-         return {
-             k: self._repr(v)
-             for k, v in self._inputs.items()
-         }
-
-    def outputs(self): return self._outputs
-
-    def output_reprs(self):
-         return {
-             k: self._repr(v)
-             for k, v in self._outputs.items()
-         } if self._outputs is not None else None
-
-    def _repr(self, tensor_value):
-        if isinstance(tensor_value, tf.SparseTensorValue):
-            # THIS IS VERY WRONG. ASSUMES A RAGGED SPARSE TENSOR.
-            return self._repr(tensor_value.values)
-        if isinstance(tensor_value, np.ndarray):
-            if tensor_value.dtype.kind == 'O':
-                tensor_value = np.vectorize(lambda x: x.decode('utf-8'))(tensor_value)
-            return repr([tensor_value.tolist()]) 
-
-        return repr(tensor_value)
-
-    def with_updated_outputs(self, method):
-        return MethodExample.generate(
-            method=method,
-            inputs=self._inputs,
-        )
-
-class MethodDocumentation(object):
-    @classmethod
-    def detect(cls, *, bibliographer, model, method_name, method, signature_def):
-        # NOTE(adamb) Since we don't want to be parsing rst here, we'll just rewrite
-        #     it to include detected citations. Expect that this rst will be parsed
-        #     for real when rendering HTML.
-        docstr = GoogleDocstring(obj=method).result()
-        docstr_sections = docstr['sections']
-        text_sections = [v for k, v in docstr_sections if k == 'text']
-        overview = "\n".join([l for t in text_sections for l in t])
-
-        docstr['args'] = _enrich_docs_with_tensor_info(docstr['args'], signature_def.inputs)
-        docstr['returns'] = _enrich_docs_with_tensor_info(docstr['returns'], signature_def.outputs)
-
-        return cls(
-            name=method_name,
-            overview=bibliographer.rewrite(overview),
-            inputs=docstr['args'],
-            outputs=docstr['returns'],
-            example=tfi.driver.tf.documentation.MethodExample.generate(
+    return tfi.doc.MethodDocumentation(
+        name=method_name,
+        overview=bibliographer.rewrite(overview),
+        inputs=docstr['args'],
+        outputs=docstr['returns'],
+        examples=[
+            tfi.doc.MethodDataDocumentation.generate(
                 method=getattr(model, method_name),
                 inputs={
                     input_name: eval("\n".join(input_val_lines), {}, {'m': model, 'tfi': tfi})
                     for input_name, _, input_val_lines in docstr['example args']
                 },
             ),
-        )
+        ],
+    )
 
-    def __init__(self, *, name, overview, inputs, outputs, example):
-        self._name = name # str
-        self._overview = overview # [str, ...]
-        self._inputs = inputs # [(name, tensor_info_str, doc: [str])]
-        self._outputs = outputs # [(name, tensor_info_str, doc: [str])]
-        self._example = example
+def detect_model_documentation(model):
+        source = tfi.doc.ModelSource.detect(model)
 
-    def name(self): return self._name
-
-    def overview(self): return self._overview
-
-    def inputs(self): return self._inputs
-
-    def outputs(self): return self._outputs
-
-    def example(self): return self._example
-
-    def with_updated_example_outputs(self, method):
-        return MethodDocumentation(
-            name=self._name,
-            overview=self._overview,
-            inputs=self._inputs,
-            outputs=self._outputs,
-            example=self._example.with_updated_outputs(method),
-        )
-
-    def docstring(self):
-        name = self._name
-        overview = self._overview
-        docstr = None
-        if overview:
-            docstr = "\n".join([name, "-" * len(name), "", overview])
-
-        return docstr
-
-
-class ModelDocumentation(object):
-    @classmethod
-    def detect(cls, model):
-        source = ModelSource.detect(model)
-
-        bibliographer = Bibliographer()
+        bibliographer = tfi.doc.Bibliographer()
 
         def maybeattr(o, attr, default=None):
             return getattr(o, attr) if o and hasattr(o, attr) else default
@@ -269,7 +52,7 @@ class ModelDocumentation(object):
         text_sections = [v for k, v in model_docstr_sections if k == 'text']
         overview = "\n".join([l for t in text_sections for l in t])
 
-        return tfi.driver.tf.documentation.ModelDocumentation(
+        return tfi.doc.ModelDocumentation(
             name=maybeattr(model, '__name__', type(model).__name__),
             hyperparameters=maybeattr(model, '__tfi_hyperparameters__', []),
             overview=bibliographer.rewrite(overview),
@@ -288,7 +71,7 @@ class ModelDocumentation(object):
             source=source,
             facets_overview_proto=maybeattr(model, '__tfi_facets_overview_proto__'),
             methods=[
-                tfi.driver.tf.documentation.MethodDocumentation.detect(
+                _detect_method_documentation(
                     model=model,
                     bibliographer=bibliographer,
                     method_name=method_name,
@@ -299,70 +82,6 @@ class ModelDocumentation(object):
             ],
             references=bibliographer.references(),
         )
-
-    def __init__(self, *,
-        hyperparameters,
-        name,
-        overview,
-        methods,
-        authors,
-        references,
-        implementation_notes,
-        source,
-        facets_overview_proto,
-    ):
-        self._hyperparameters = hyperparameters
-        self._name = name
-        self._overview = overview
-        self._methods = methods
-        self._authors = authors
-        self._references = references
-        self._implementation_notes = implementation_notes
-        self._source = source
-        self._facets_overview_proto = facets_overview_proto
-
-    def hyperparameters(self): return self._hyperparameters
-
-    def name(self): return self._name
-
-    def overview(self): return self._overview
-
-    def methods(self): return self._methods
-
-    def authors(self): return self._authors
-
-    def references(self): return self._references
-
-    def implementation_notes(self): return self._implementation_notes
-
-    def source(self): return self._source
-
-    def facets_overview_proto(self): return self._facets_overview_proto
-
-    def with_updated_example_outputs(self, model):
-        return ModelDocumentation(
-            hyperparameters=self._hyperparameters,
-            name=self._name,
-            overview=self._overview,
-            authors=self._authors,
-            references=self._references,
-            implementation_notes=self._implementation_notes,
-            source=self._source,
-            facets_overview_proto=self._facets_overview_proto,
-            methods=[
-                method.with_updated_example_outputs(getattr(model, method.name()))
-                for method in self._methods
-            ],
-        )
-
-    def docstring(self):
-        name = self._name
-        overview = self._overview
-        docstr = None
-        if overview:
-            docstr = "\n".join([name, "-" * len(name), "", overview])
-
-        return docstr
 
 def _tensor_info_str(tensor):
     if tensor.shape.ndims is None:
@@ -415,7 +134,7 @@ def _write_json(path, obj):
     with open(path, 'w') as f:
         tfi.json.dump(obj, f)
 
-class MethodExampleCodec(object):
+class MethodDataDocumentationCodec(object):
     def __init__(self, method_layout):
         self._layout = method_layout
 
@@ -437,9 +156,8 @@ class MethodExampleCodec(object):
                 }
             )
 
-
     def read(self, signature_def):
-        return MethodExample(
+        return tfi.doc.MethodDataDocumentation(
             inputs=self._detect(
                 lambda: self._read_json_tf_example_from(
                     signature_def.inputs,
@@ -531,7 +249,7 @@ class MethodDocumentationCodec(object):
                 },
             },
         }
-        MethodExampleCodec(self._layout).write(method_doc.example()),
+        MethodDataDocumentationCodec(self._layout).write(method_doc.examples()[0]),
         _write_json(self._layout.metadata_path, metadata)
         
     def read(self, signature_def):
@@ -540,7 +258,7 @@ class MethodDocumentationCodec(object):
         doc_inputs = doc.get('inputs', {})
         doc_outputs = doc.get('outputs', {})
 
-        return MethodDocumentation(
+        return tfi.doc.MethodDocumentation(
             name=self._name,
             overview=metadata.get('overview', None),
             inputs=[
@@ -551,7 +269,9 @@ class MethodDocumentationCodec(object):
                 (name, self._tensor_info_str(ti), doc_outputs.get(name, ''))
                 for name, ti in signature_def.outputs.items()                    
             ],
-            example=MethodExampleCodec(self._layout).read(signature_def),
+            examples=[
+              MethodDataDocumentationCodec(self._layout).read(signature_def),
+            ],
         )
 
     def _tensor_info_str(self, tensor_info):
@@ -605,7 +325,7 @@ class ModelDocumentationCodec(object):
 
     def read(self, signature_defs):
         metadata = _read_json_else(self._layout.metadata_path, {})
-        return ModelDocumentation(
+        return tfi.doc.ModelDocumentation(
             # TODO(adamb) Should be transformed to the below structure, with val_type_str -> val_type
             # (name, val_type, val, docs)
             hyperparameters=metadata.get('hyperparameters', []),

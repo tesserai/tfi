@@ -3,12 +3,13 @@ import json
 import os.path
 import urllib
 
-from flask import Flask, request, send_file, make_response, redirect, url_for, Response
+from flask import Flask, request, send_file, make_response, redirect, Response
 from tfi.doc.template import HtmlRenderer
 
 from tfi.asset import asset_path as _asset_path
 
-from tfi.serve.endpoint import make_endpoint as _make_endpoint
+from tfi.serve.rest import add_endpoints as _add_rest_endpoints
+
 
 ERROR_ENCODER = json.JSONEncoder(sort_keys=True, indent=2, separators=(',', ': '))
 
@@ -32,14 +33,6 @@ def _public_url(request, path, params='', query='', fragment=''):
     fragment=fragment,
   ).geturl()
 
-def _set_environ_later(k, v):
-  def _wrap(f):
-    def _do():
-      request.environ[k] = v
-      return f()
-    return _do
-  return _wrap
-
 def make_app(model, tracer, model_file_fn=None, extra_scripts=""):
   if model is None:
     raise Exception("No model given")
@@ -53,18 +46,7 @@ def make_app(model, tracer, model_file_fn=None, extra_scripts=""):
       static_url_path="/doc/en/static",
       static_folder=static_folder)
 
-  trace_route = tracer(app)
-
-  for method_name, method in inspect.getmembers(model, predicate=inspect.ismethod):
-    if method_name.startswith('_'):
-      continue
-
-    tracing_tags = {"model.method": method_name, "visibility": "public"}
-    fn = _make_endpoint(model, method_name)
-    fn = _set_environ_later('TFI_METHOD', method_name)(fn)
-    fn = trace_route(tracing_tags)(fn)
-    fn.__name__ = method_name
-    app.route("/api/%s" % method_name, methods=["POST", "GET"])(fn)
+  _add_rest_endpoints(model, tracer, app)
 
   if model_file_fn:
     @app.route("/meta/snapshot", methods=["GET"])
@@ -92,7 +74,6 @@ data: {"status":"done"}
       content_type='text/event-stream',
       headers=headers,
     )
-
 
   @app.route("/object/<path:objectpath>", methods=["GET"])
   def get_object(objectpath):

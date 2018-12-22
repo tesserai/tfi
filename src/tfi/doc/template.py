@@ -1,16 +1,11 @@
+import base64
+from collections import OrderedDict
 from jinja2 import Template as JinjaTemplate
-
 from tfi.format.html.bibtex import citation_bibliography_html
 from tfi.format.html.python import html_repr
 from tfi.format.html.rst import parse_rst as _parse_rst
-
 from tfi.parse.html import visible_text_for as _visible_text_for
-
-from tfi.doc.examples import resolve_language as _resolve_language
-
-from collections import OrderedDict
-
-import base64
+from tfi.doc.example_code_generators import example_code_generator as _resolve_language
 
 _page_template_path = __file__[:-2] + "html"
 if _page_template_path.endswith("__init__.html"):
@@ -60,7 +55,7 @@ class HtmlRenderer(object):
             for method in methods
         }
 
-        language_names = ['json']
+        language_names = ['json', 'tensorflow-grpc-python']
         # if include_snapshot:
         #     language_names.append('python')
 

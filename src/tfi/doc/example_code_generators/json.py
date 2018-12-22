@@ -1,35 +1,14 @@
+from tfi.doc.example_code import ExampleCode, ExampleCodeSet
+
 import json
 import tfi.json
 import shlex
-import os
 from tfi.base import _recursive_transform
-from yapf.yapflib.yapf_api import FormatCode
-from yapf.yapflib.style import CreateGoogleStyle
-from tfi.format.html.python import html_repr as _python_html_repr
 
-def _except_log(fn):
-    def _do(*a, **kw):
-        print("_do", fn, a, kw)
-        try:
-            return fn(*a, **kw)
-        except Exception as ex:
-            print(ex)
-            import traceback
-            traceback.print_exc()
-    return _do
-
-class PreludeAuthor(object):
-    def __init__(self, proto, host):
-        self._proto = proto
-        self._host = host
-    
-    def consider(self, o):
-        if not hasattr(o, '__fetchable__'):
-            return None
-
-        f = dict(o.__fetchable__())
-        f['url'] = '%s://%s/%s' % (self._proto, self._host, f['urlpath'])
-        return f
+from tfi.doc.example_code_generators.util import (
+    FetchContext as _FetchContext,
+    except_log as _except_log,
+)
 
 def _pretty_json(o):
     return json.dumps(
@@ -39,17 +18,7 @@ def _pretty_json(o):
         sort_keys=True,
     )
 
-class SingleExample(object):
-    def __init__(self, name, label, lines):
-        self.name = name
-        self.label = label
-        self.lines = lines
-
-class MultipleExamples(object):
-    def __init__(self, examples):
-        self.examples = examples
-
-class JsonExemplar(object):
+class Json(object):
     name = 'json'
     label = 'JSON'
     example_for_class = 'language-curl'
@@ -73,7 +42,7 @@ class JsonExemplar(object):
                 "-d '{}'",
             ])
 
-        pa = PreludeAuthor(proto, host)
+        pa = _FetchContext(proto, host)
         prefetch_commands = []
         prefetch_replacements = [('$', '\\$')]
         ref_replacements = []
@@ -133,7 +102,7 @@ class JsonExemplar(object):
         examples = []
         if ref_replacements:
             examples.append(
-                SingleExample(
+                ExampleCode(
                     name='ref-data',
                     label='Using data from the web',
                     lines=[
@@ -152,7 +121,7 @@ class JsonExemplar(object):
 
         if prefetch_commands:
             examples.append(
-                SingleExample(
+                ExampleCode(
                     name='inline-data',
                     label='Using inline data',
                     lines=[
@@ -170,13 +139,4 @@ class JsonExemplar(object):
                 )
             )
         
-        return MultipleExamples(examples)
-_LANGUAGE_IMPLS = {}
-def _add_exemplar(ex):
-    _LANGUAGE_IMPLS[ex.name] = ex
-
-
-_add_exemplar(JsonExemplar())
-
-def resolve_language(name):
-    return _LANGUAGE_IMPLS[name]
+        return ExampleCodeSet(examples)
